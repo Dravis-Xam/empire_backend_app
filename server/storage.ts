@@ -49,7 +49,6 @@ const pool = new Pool({
 const sessionStore = new PgSession({
   pool,
   tableName: "session",
-  createTableIfMissing: true,
 });
 
 
