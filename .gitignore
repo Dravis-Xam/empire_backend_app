@@ -4,9 +4,6 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-client
-client/dist
-client/*
 
 .env
 .env.*.local
