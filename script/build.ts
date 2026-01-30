@@ -19,7 +19,6 @@ const allowlist = [
   "memorystore",
   "multer",
   "nanoid",
-  "nodemailer",
   "openai",
   "passport",
   "passport-local",
@@ -56,7 +55,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    external: [...externals, "nodemailer"],
     logLevel: "info",
   });
 }
