@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { ROLES, type InsertUser } from "@shared/schema";
+import { pay, send_invoice_email } from "./pay";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Set up authentication (passport)
@@ -63,6 +64,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.createOrder(input);
 
     // Create delivery if notification needed or just notify logic
+    send_invoice_email(order);
     // Auto-create delivery for simplified logic
     await storage.createDelivery({
       orderId: order.id,
@@ -75,8 +77,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
+    const result = await pay(req?.body);
     const order = await storage.updateOrderStatus(id, req.body.status);
-    res.json(order);
+    res.json({ order, result });
   });
 
   // DELIVERIES
