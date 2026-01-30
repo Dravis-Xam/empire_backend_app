@@ -138,6 +138,15 @@ export const api = {
         200: z.array(z.custom<typeof notifications.$inferSelect>()),
       },
     },
+  },
+  callbacks: {
+    mpesa: {
+      method: 'POST' as const,
+      path: '/api/callbacks/mpesa',
+      responses: {
+        200: z.object({ message: z.string() }),
+      },
+      }
   }
 };
 
