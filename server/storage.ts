@@ -1,6 +1,9 @@
 import { users, products, orders, deliveries, notifications, type User, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "pg";
 
 export interface IStorage {
   // Users & Auth
@@ -34,8 +37,24 @@ export interface IStorage {
   sessionStore: any;
 }
 
+const PgSession = connectPgSimple(session);
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }
+    : false,
+});
+
+const sessionStore = new PgSession({
+  pool,
+  tableName: "session",
+  createTableIfMissing: true,
+});
+
+
 export class DatabaseStorage implements IStorage {
-  sessionStore: any;
+  sessionStore = sessionStore;
 
   // Users
   async getUser(id: number): Promise<User | undefined> {
