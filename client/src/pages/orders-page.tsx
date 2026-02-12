@@ -60,7 +60,7 @@ export default function OrdersPage() {
                   <StatusBadge status={order.status} />
                 </div>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Placed on {new Date(order.createdAt).toLocaleDateString()} • {user?.role === 'admin' ? `User ID: ${order.userId}` : 'My Order'}
+                  Placed on {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "Unknown date"} • {user?.role === 'admin' ? `User ID: ${order.userId}` : 'My Order'}
                 </p>
                 <div className="mt-2 text-sm font-medium">
                   Total: ${Number(order.total).toFixed(2)}
