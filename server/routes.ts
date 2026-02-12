@@ -77,9 +77,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
-    const result = await pay(req?.body);
-    const order = await storage.updateOrderStatus(id, req.body.status);
-    res.json({ order, result });
+    const input = api.orders.updateStatus.input.parse(req.body);
+
+    if (req.body?.amount && req.body?.phone) {
+      await pay(req.body);
+    }
+
+    const order = await storage.updateOrderStatus(id, input.status);
+    res.json(order);
   });
 
   // DELIVERIES
@@ -100,6 +105,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const userId = (req.user as any).id;
     const notes = await storage.getNotifications(userId);
     res.json(notes);
+  });
+
+  // CALLBACKS
+  app.post(api.callbacks.mpesa.path, async (_req, res) => {
+    res.status(200).json({ message: "M-Pesa callback received" });
   });
 
   return httpServer;
