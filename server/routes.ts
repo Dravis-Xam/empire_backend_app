@@ -42,13 +42,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch(api.products.update.path, requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id), 10);
     const product = await storage.updateProduct(id, req.body);
     res.json(product);
   });
 
   app.delete(api.products.delete.path, requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id), 10);
     await storage.deleteProduct(id);
     res.status(204).send();
   });
@@ -76,7 +76,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id), 10);
     const input = api.orders.updateStatus.input.parse(req.body);
 
     if (req.body?.amount && req.body?.phone) {
@@ -94,7 +94,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch(api.deliveries.update.path, requireAuth, async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id), 10);
     const delivery = await storage.updateDelivery(id, req.body);
     res.json(delivery);
   });

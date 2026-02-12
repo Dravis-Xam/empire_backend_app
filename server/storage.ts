@@ -1,4 +1,4 @@
-import { users, products, orders, deliveries, notifications, type User, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification } from "@shared/schema";
+import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import session from "express-session";
@@ -67,7 +67,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const normalizedUser = {
+      ...insertUser,
+      role: (insertUser.role as Role | undefined) ?? undefined,
+    };
+    const [user] = await db.insert(users).values(normalizedUser).returning();
     return user;
   }
 
