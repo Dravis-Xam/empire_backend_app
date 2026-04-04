@@ -25,14 +25,23 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  const isProduction = app.get("env") === "production";
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "default_secret",
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
+    proxy: isProduction,
+    cookie: {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
   };
 
-  if (app.get("env") === "production") {
+  if (isProduction) {
     app.set("trust proxy", 1);
   }
 
@@ -41,12 +50,16 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
+    new LocalStrategy({ passReqToCallback: true }, async (req: any, username, password, done) => {
       try {
-        const user = await storage.getUserByUsername(username);
+        const loginIdentifier = String(req.body?.username ?? req.body?.email ?? username ?? "").trim();
+        let user = await storage.getUserByUsername(loginIdentifier);
+        if (!user && loginIdentifier) {
+          user = await storage.getUserByEmail(loginIdentifier);
+        }
 
         if (!user) {
-          return done(null, false, { message: "Invalid username" });
+          return done(null, false, { message: "Invalid credentials" });
         }
 
         // Accept seeded plain-text users for local demo environments.
@@ -88,17 +101,32 @@ export function setupAuth(app: Express) {
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       req.login(user, (err) => {
         if (err) return next(err);
-        res.status(200).json(user);
+        req.session.save((saveErr: any) => {
+          if (saveErr) return next(saveErr);
+          res.status(200).json(user);
+        });
       });
     })(req, res, next);
   });
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const input = api.auth.register.input.parse(req.body);
+      const normalizedBody = {
+        ...req.body,
+        username: req.body?.username ?? req.body?.email,
+      };
+
+      const input = api.auth.register.input.parse(normalizedBody);
       const existing = await storage.getUserByUsername(input.username);
       if (existing) {
         return res.status(400).json({ message: "Username already exists", field: "username" });
+      }
+
+      if (input.email) {
+        const existingEmail = await storage.getUserByEmail(input.email);
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email already exists", field: "email" });
+        }
       }
 
       const created = await storage.createUser({

@@ -14,6 +14,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // === SEED DATA ===
   await seedDatabase();
 
+  
+  //health route
+  app.get("/api/health", async (_req, res) => {
+    res.json("we are doing okay");
+  });
+
   // === PROTECTED ROUTE MIDDLEWARE ===
   const requireAuth = (req: any, res: any, next: any) => {
     if (req.isAuthenticated()) return next();
@@ -39,10 +45,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       throw err;
     }
-  });
-
-  app.get("/api/health", async (_req, res) => {
-    res.json("we are doing okay");
   });
 
   app.patch(api.products.update.path, requireAuth, async (req, res) => {
