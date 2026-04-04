@@ -41,6 +41,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/health", async(req,res) => {
+    res.json("We are doing good");
+  });
+
   app.patch(api.products.update.path, requireAuth, async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const product = await storage.updateProduct(id, req.body);
