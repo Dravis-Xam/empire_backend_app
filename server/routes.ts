@@ -41,8 +41,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/health", async(req,res) => {
-    res.json("We are doing good");
+  app.get("/api/health", async (_req, res) => {
+    res.json("we are doing okay");
   });
 
   app.patch(api.products.update.path, requireAuth, async (req, res) => {

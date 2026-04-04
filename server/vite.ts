@@ -54,11 +54,16 @@ export async function setupVite(server: Server, app: Express) {
     }
   };
 
-  app.get(["/", "/api"], async (req, res, next) => {
+  app.get("/", async (req, res, next) => {
     await renderIndex(req.originalUrl, res, next);
   });
 
   app.use("/{*path}", async (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      res.status(404).json({ message: "API route not found" });
+      return;
+    }
+
     await renderIndex(req.originalUrl, res, next);
   });
 }
