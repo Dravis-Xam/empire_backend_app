@@ -11,6 +11,9 @@ This is a high-performance backend for an e-commerce platform dealing with phone
 - `client`: End-user shopping experience.
 
 ---
+## Health route
+`GET /api/health`
+- **Response**: `we are doing okay`
 
 ## Authentication Endpoints
 
