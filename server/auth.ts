@@ -6,6 +6,8 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
+import { api } from "@shared/routes";
+import { z } from "zod";
 
 const scryptAsync = promisify(scrypt);
 
@@ -42,31 +44,25 @@ export function setupAuth(app: Express) {
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        // For seed data (plain text password check for "admin"/"admin" etc if they were seeded as plain text)
-        // In production, ALWAYS hash. Here we handle both for the seeded users which I seeded as plain text in routes.ts
-        // BUT wait, in routes.ts I seeded them as plain text. 
-        // So I need to handle that.
-        // Let's just strictly use hashing and update routes.ts to hash seed data?
-        // OR simpler: check if it matches plain text OR hash.
-        
+
         if (!user) {
           return done(null, false, { message: "Invalid username" });
         }
 
-        // Check if password is seeded plain text (for demo roles)
+        // Accept seeded plain-text users for local demo environments.
         if (user.password === password) {
-            return done(null, user);
+          return done(null, user);
         }
 
-        // Real check
-        // const isValid = await comparePasswords(password, user.password);
-        // if (!isValid) {
-        //   return done(null, false, { message: "Invalid password" });
-        // }
-        
-        // For this demo with seeded plain text passwords, I'll allow plain text match.
-        // If I was building real auth, I'd hash.
-        return done(null, user);
+        // Support hashed passwords for registered users.
+        if (user.password.includes(".")) {
+          const isValid = await comparePasswords(password, user.password);
+          if (isValid) {
+            return done(null, user);
+          }
+        }
+
+        return done(null, false, { message: "Invalid password" });
       } catch (err) {
         return done(err);
       }
@@ -97,15 +93,37 @@ export function setupAuth(app: Express) {
     })(req, res, next);
   });
 
+  app.post("/api/register", async (req, res, next) => {
+    try {
+      const input = api.auth.register.input.parse(req.body);
+      const existing = await storage.getUserByUsername(input.username);
+      if (existing) {
+        return res.status(400).json({ message: "Username already exists", field: "username" });
+      }
+
+      const created = await storage.createUser({
+        ...input,
+        password: await hashPassword(input.password),
+      });
+
+      return res.status(201).json(created);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid input" });
+      }
+      return next(err);
+    }
+  });
+
   app.post("/api/logout", (req, res, next) => {
     req.logout((err) => {
       if (err) return next(err);
-      res.sendStatus(200);
+      res.status(200).json({ message: "Logged out" });
     });
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     res.json(req.user);
   });
 }

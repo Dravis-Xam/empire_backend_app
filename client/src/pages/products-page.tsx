@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useProducts } from "@/hooks/use-products";
-import { Plus, Search, Trash2, Edit2, Loader2 } from "lucide-react";
+import { Plus, Search, Trash2, Edit2, Loader2, Package } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -22,7 +22,7 @@ export default function ProductsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      updateProduct({ id: editingProduct.id, ...formData, price: Number(formData.price), stock: Number(formData.stock) });
+      updateProduct({ id: editingProduct.id, ...formData, stock: Number(formData.stock) });
     } else {
       createProduct(formData as any);
     }
