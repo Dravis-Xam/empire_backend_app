@@ -31,9 +31,7 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
-  app.use("/{*path}", async (req, res, next) => {
-    const url = req.originalUrl;
-
+  const renderIndex = async (url: string, res: any, next: any) => {
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -54,5 +52,13 @@ export async function setupVite(server: Server, app: Express) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
     }
+  };
+
+  app.get(["/", "/api"], async (req, res, next) => {
+    await renderIndex(req.originalUrl, res, next);
+  });
+
+  app.use("/{*path}", async (req, res, next) => {
+    await renderIndex(req.originalUrl, res, next);
   });
 }
