@@ -134,6 +134,11 @@ export function setupAuth(app: Express) {
         password: await hashPassword(input.password),
       });
 
+      storage.createNotification({
+        userId: created.id,
+        message: `Welcome ${created.name} to Empire Hub Phones. We are glad to have you. Feel free to explore our catalogue. For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
+      })
+
       return res.status(201).json(created);
     } catch (err) {
       if (err instanceof z.ZodError) {

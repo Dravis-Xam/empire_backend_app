@@ -1,162 +1,195 @@
 // src/services/mpesa.service.ts
-import fetch from 'node-fetch';
 import { storage } from './storage';
 import nodemailer from 'nodemailer';
-
-const ENV = process.env.NODE_ENV || 'development';
-
-const AUTH_URL =
-  ENV === 'development'
-    ? 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-    : '';
-
-const STK_URL =
-  ENV === 'development'
-    ? 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
-    : '';
+import { TokenService, StkService } from './k2-connect';
 
 /* ===================== TYPES ===================== */
 
 export interface StkPushPayload {
+  userid: number,
   amount: number;
   phone: string;
 }
 
-export interface MpesaAccessTokenResponse {
-  access_token: string;
-  expires_in: string;
+export interface KopoKopoTokenResponse {
+  access_token: string,
+  token_type: string,
+  expires_in: number,
+  created_at: string
 }
 
 export interface StkPushResponse {
-  MerchantRequestID: string;
-  CheckoutRequestID: string;
-  ResponseCode: string;
-  ResponseDescription: string;
-  CustomerMessage: string;
+    success: boolean,
+    message: string,
+    checkoutUrl: string | null,
 }
-
-/* ===================== HELPERS ===================== */
-
-const pad = (n: number): string => (n < 10 ? `0${n}` : `${n}`);
-
-const getTimestamp = (): string => {
-  const now = new Date();
-  return (
-    now.getFullYear().toString() +
-    pad(now.getMonth() + 1) +
-    pad(now.getDate()) +
-    pad(now.getHours()) +
-    pad(now.getMinutes()) +
-    pad(now.getSeconds())
-  );
-};
 
 /* ===================== AUTH ===================== */
 
-export const getMpesaAccessToken = async (): Promise<string> => {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY!;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET!;
+export const getKopoKopoToken = async(): Promise<KopoKopoTokenResponse> => {
+  return TokenService
+        .getToken()
+        .then((response: any) => response.data as KopoKopoTokenResponse)
+        .catch((error: any) => {
+            console.log(error);
+            throw new Error('Failed to get KopoKopo token');
+        })
+}
 
-  if (!consumerKey || !consumerSecret) {
-    throw new Error('M-Pesa credentials missing');
-  }
+// export const getMpesaAccessToken = async (): Promise<string> => {
+//   const consumerKey = process.env.MPESA_CONSUMER_KEY!;
+//   const consumerSecret = process.env.MPESA_CONSUMER_SECRET!;
 
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+//   if (!consumerKey || !consumerSecret) {
+//     throw new Error('M-Pesa credentials missing');
+//   }
 
-  const response = await fetch(AUTH_URL, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-    },
-  });
+//   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Auth failed: ${error}`);
-  }
+//   const response = await fetch(AUTH_URL, {
+//     headers: {
+//       Authorization: `Basic ${auth}`,
+//     },
+//   });
 
-  const data = (await response.json()) as MpesaAccessTokenResponse;
-  return data.access_token;
-};
+//   if (!response.ok) {
+//     const error = await response.text();
+//     throw new Error(`Auth failed: ${error}`);
+//   }
+
+//   const data = (await response.json()) as MpesaAccessTokenResponse;
+//   return data.access_token;
+// };
 
 /* ===================== STK PUSH ===================== */
 
 export const initiateStkPush = async (
   payload: StkPushPayload
 ): Promise<StkPushResponse> => {
-  const { amount, phone } = payload;
+  const accessToken = await getKopoKopoToken();
+  const startTime = new Date(accessToken?.created_at);
+  const timeout = new Date(accessToken?.expires_in);
+  const currentTime = new Date();
 
-  if (!amount || !phone) {
-    throw new Error('Amount or phone missing');
+  while (currentTime.getTime() > timeout.getTime()) {
+    console.log('Access token expired, fetching new token...');
+    const newTokenResponse = await getKopoKopoToken();
+    accessToken.access_token = newTokenResponse.access_token;
+    accessToken.created_at = newTokenResponse.created_at;
+    accessToken.expires_in = newTokenResponse.expires_in;
+
+    // Update times
+    startTime.setTime(Date.parse(accessToken.created_at));
+    timeout.setTime(startTime.getTime() + accessToken.expires_in * 1000);
+
+    await storage.createNotification({
+      userId: payload.userid,
+      message: `Your previous payment token expired. Try a little faster this time 😉`
+    });
   }
 
-  const accessToken = await getMpesaAccessToken();
-  const timestamp = getTimestamp();
+  const user = await storage.getUser(payload.userid)
 
-  const businessShortCode = process.env.MPESA_SHORTCODE || '174379';
-  const passkey = process.env.MPESA_PASSKEY!;
-  const callbackUrl = process.env.MPESA_CALLBACK_URL!;
-
-  if (!passkey || !callbackUrl) {
-    throw new Error('Passkey or callback URL missing');
-  }
-
-  const password = Buffer.from(
-    `${businessShortCode}${passkey}${timestamp}`
-  ).toString('base64');
-
-  const requestBody = {
-    BusinessShortCode: businessShortCode,
-    Password: password,
-    Timestamp: timestamp,
-    TransactionType: 'CustomerPayBillOnline',
-    Amount: amount,
-    PartyA: phone,
-    PartyB: businessShortCode,
-    PhoneNumber: phone,
-    CallBackURL: callbackUrl,
-    AccountReference: 'Test Payment',
-    TransactionDesc: 'Payment for services',
-  };
-
-  const response = await fetch(STK_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
+  // 2. Trigger M-Pesa STK Push
+  const locationUrl = await StkService.initiateStkPush({
+    paymentChannel: 'M-PESA',
+    tillNumber: process.env.K2_TILL_NUMBER || '',
+    firstName: user?.name?.split(" ")[0] || 'Customer',
+    lastName: user?.name?.split(" ")[1] || 'User',
+    phoneNumber: payload.phone, // E.g., +254700000000
+    amount: payload.amount,
+    email: user?.email || 'customer@example.com',
+    callbackUrl: process.env.K2_CALLBACK_URL || '',
+    accessToken: accessToken
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`STK Push failed: ${error}`);
-  }
-
-  return (await response.json()) as StkPushResponse;
+  // K2 returns a Location header URL to track request status
+  return Promise.resolve({
+    success: true,
+    message: 'Payment initiation successful',
+    checkoutUrl: locationUrl
+  });
 };
+
+// export const initiateStkPush = async (
+//   payload: StkPushPayload
+// ): Promise<StkPushResponse> => {
+//   const { amount, phone } = payload;
+
+//   if (!amount || !phone) {
+//     throw new Error('Amount or phone missing');
+//   }
+
+//   const accessToken = await getMpesaAccessToken();
+//   const timestamp = getTimestamp();
+
+//   const businessShortCode = process.env.MPESA_SHORTCODE || '174379';
+//   const passkey = process.env.MPESA_PASSKEY!;
+//   const callbackUrl = process.env.MPESA_CALLBACK_URL!;
+
+//   if (!passkey || !callbackUrl) {
+//     throw new Error('Passkey or callback URL missing');
+//   }
+
+//   const password = Buffer.from(
+//     `${businessShortCode}${passkey}${timestamp}`
+//   ).toString('base64');
+
+//   const requestBody = {
+//     BusinessShortCode: businessShortCode,
+//     Password: password,
+//     Timestamp: timestamp,
+//     TransactionType: 'CustomerPayBillOnline',
+//     Amount: amount,
+//     PartyA: phone,
+//     PartyB: businessShortCode,
+//     PhoneNumber: phone,
+//     CallBackURL: callbackUrl,
+//     AccountReference: 'Test Payment',
+//     TransactionDesc: 'Payment for services',
+//   };
+
+//   const response = await fetch(STK_URL, {
+//     method: 'POST',
+//     headers: {
+//       Authorization: `Bearer ${accessToken}`,
+//       'Content-Type': 'application/json',
+//     },
+//     body: JSON.stringify(requestBody),
+//   });
+
+//   if (!response.ok) {
+//     const error = await response.text();
+//     throw new Error(`STK Push failed: ${error}`);
+//   }
+
+//   return (await response.json()) as StkPushResponse;
+// };
 
 export const pay = async (data: any) => {
     try {
-        const { amount, phone } = data;
+        const { amount, phone, userid } = data;
 
-        const stkResponse = await initiateStkPush({ amount, phone });
+        const stkResponse = await initiateStkPush({ userid, amount, phone });
 
-        if (stkResponse.ResponseCode === '0') {
-        return {
-            success: true,
-            message: 'STK push initiated successfully',
-            data: stkResponse,
-        };
-        }
-
-        return {
-        success: false,
-        message: `Payment failed with code ${stkResponse.ResponseCode}`,
-        data: stkResponse,
-        };
+        if (stkResponse.success) {
+            await storage.createNotification({
+                userId: userid,
+                message: `Your payment of KES ${amount} has been initiated. Please complete the payment on your phone.`
+            });
+        } else {
+            await storage.createNotification({
+                userId: userid,
+                message: `Payment initiation failed: ${stkResponse.message}`
+            });
+        } 
+        return stkResponse;
     } catch (error: any) {
         console.error('M-Pesa Error:', error.message);
-
+        await storage.createNotification({
+            userId: data.userid,
+            message: `Payment initiation failed: ${error.message}`
+        });
         return {
         success: false,
         message: 'Internal server error',
@@ -199,6 +232,10 @@ export async function send_invoice_email(order: { id: number; createdAt: Date | 
 
     try {
       const info = await transporter.sendMail(mailOptions);
+      storage.createNotification({
+        userId: user.id,
+        message: `Hey ${user.name}, your order has been processed and the invoice has been sent to your  email: ${user.email} . For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
+      })
       console.log(`Sent invoice to ${user.email}: ${info.response}`);
     } catch (err) {
       console.error(`Failed to send invoice to ${user.email}:`, err);

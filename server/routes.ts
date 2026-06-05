@@ -65,9 +65,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(orders);
   });
 
-  app.post(api.orders.create.path, async (req, res) => {
+  app.post(api.orders.create.path, requireAuth, async (req, res) => {
     const input = api.orders.create.input.parse(req.body);
     const order = await storage.createOrder(input);
+
+    const userid = (req.user as any).id;
+    if (req.body?.amount && req.body?.phone) {
+      await pay({...req.body, userid});
+    }
+
+    const username = await storage.getUser(order.userId).then(value => value?.name)
+    storage.createNotification({
+      userId: order.userId,
+      message: `Hey ${username}, you have made a new order. <a href="/orders/${order.id}">Tap here to view details</a> For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
+    })
 
     // Create delivery if notification needed or just notify logic
     send_invoice_email(order);
@@ -84,11 +95,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const input = api.orders.updateStatus.input.parse(req.body);
-
-    if (req.body?.amount && req.body?.phone) {
-      await pay(req.body);
-    }
-
     const order = await storage.updateOrderStatus(id, input.status);
     res.json(order);
   });
