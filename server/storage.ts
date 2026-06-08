@@ -1,4 +1,5 @@
 import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser } from "@shared/schema";
+import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser} from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import session from "express-session";
@@ -16,6 +17,12 @@ export interface IStorage {
 
   createGoogleUser(data: any): Promise<User>;
   createFacebookUser(data: any): Promise<User>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByGoogleId(id: string): Promise<User | undefined>;
+  //getUserByFacebookId(id: string): Promise<User | undefined>;
+  updateUser(id: number, data: Partial<User>): Promise<User>;
 
   // Products
   getProducts(): Promise<Product[]>;
@@ -107,6 +114,15 @@ export class DatabaseStorage implements IStorage {
     return await this.createUser(insertData);
   }
 
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+    return user;
+  }
+
+  // async getUserByFacebookId(facebookId: string): Promise<User | undefined> {
+  //   const [user] = await db.select().from(users).where(eq(users.facebookId, facebookId));
+  //   return user;
+  // }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const normalizedUser = {
@@ -117,9 +133,13 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUser(id: number, updates: UpdateUser): Promise<User> {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    return user;
+  async updateUser(
+    id: number,
+    data: UpdateUser
+  ) {
+    const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
+
+    return (result as any).rows?.[0];
   }
 
   // Products

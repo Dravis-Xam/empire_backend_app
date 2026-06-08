@@ -65,6 +65,10 @@ export function setupAuth(app: Express) {
           if (!user) {
             const email = profile.emails?.[0]?.value || "";
 
+            if (!email) {
+              throw new Error("Google profile did not return an email");
+            }
+
             user = await storage.getUserByEmail(email);
 
             if (user) {
@@ -111,6 +115,7 @@ export function setupAuth(app: Express) {
   //           user = email
   //             ? await storage.getUserByEmail(email)
   //             : undefined;
+  //             : null;
 
   //           if (user) {
   //             await storage.updateUser(user.id, {
@@ -130,6 +135,7 @@ export function setupAuth(app: Express) {
   //         }
 
   //         done(undefined, user);
+  //         done(null, user);
   //       } catch (err) {
   //         done(err as Error);
   //       }
@@ -156,7 +162,7 @@ export function setupAuth(app: Express) {
         }
 
         // Support hashed passwords for registered users.
-        if (user.password?.includes(".")) {
+        if (user?.password?.includes(".")) {
           const isValid = await comparePasswords(password, user.password);
           if (isValid) {
             return done(null, user);
@@ -200,22 +206,22 @@ export function setupAuth(app: Express) {
     }
   );
 
-  app.get(
-    "/api/auth/facebook",
-    passport.authenticate("facebook", {
-      scope: ["email"],
-    })
-  );
+  // app.get(
+  //   "/api/auth/facebook",
+  //   passport.authenticate("facebook", {
+  //     scope: ["email"],
+  //   })
+  // );
 
-  app.get(
-    "/api/auth/facebook/callback",
-    passport.authenticate("facebook", {
-      failureRedirect: "/login",
-    }),
-    (req, res) => {
-      res.redirect("/");
-    }
-  );
+  // app.get(
+  //   "/api/auth/facebook/callback",
+  //   passport.authenticate("facebook", {
+  //     failureRedirect: "/login",
+  //   }),
+  //   (req, res) => {
+  //     res.redirect("/");
+  //   }
+  // );
 
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User, info: any) => {
@@ -253,7 +259,7 @@ export function setupAuth(app: Express) {
 
       const created = await storage.createUser({
         ...input,
-        password: await hashPassword(input?.password?.toString() || ""),
+        password: await hashPassword(input?.password ?? ""),
       });
 
       storage.createNotification({

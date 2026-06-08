@@ -22,10 +22,18 @@ This is a high-performance backend for an e-commerce platform dealing with phone
 - **Body**: `{ username, password, role, name, email }`
 - **Response**: `201 Created` with User object.
 
-### Login
+### Login via email
 `POST /api/login`
 - **Body**: `{ username, password }`
 - **Response**: `200 OK` with User object and session cookie.
+
+### Login via google
+`GET /api/auth/google`
+- **Response**: `200 OK` with User object and session cookie
+
+### Login via facebook
+`GET /api/auth/facebook`
+- **under development**
 
 ### Logout
 `POST /api/logout`

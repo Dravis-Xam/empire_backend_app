@@ -95,3 +95,5 @@ export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type UpdateUser = Partial<typeof users.$inferInsert>;
