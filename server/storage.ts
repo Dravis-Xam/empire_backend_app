@@ -1,3 +1,4 @@
+import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser } from "@shared/schema";
 import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser} from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -11,6 +12,11 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUserByGoogleId(id: string): Promise<User | undefined>;
+  getUserByFacebookId(id: string): Promise<User | undefined>;
+
+  createGoogleUser(data: any): Promise<User>;
+  createFacebookUser(data: any): Promise<User>;
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -65,17 +71,47 @@ export class DatabaseStorage implements IStorage {
   // Users
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return user ?? undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return user ?? undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user ?? undefined;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
     return user;
+  }
+
+  async getUserByFacebookId(facebookId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.facebookId, facebookId));
+    return user;
+  }
+
+  async createGoogleUser(data: any): Promise<User> {
+    const insertData: InsertUser = {
+      username: data.name,
+      email: data.email,
+      googleId: data.id,
+      provider: "google",
+    };
+    return await this.createUser(insertData);
+  }
+
+  async createFacebookUser(data: any): Promise<User> {
+    const insertData: InsertUser = {
+      username: data.name,
+      email: data.email,
+      facebookId: data.id,
+      provider: "facebook",
+    };
+    return await this.createUser(insertData);
   }
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {

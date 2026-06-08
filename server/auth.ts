@@ -63,7 +63,7 @@ export function setupAuth(app: Express) {
           let user = await storage.getUserByGoogleId(profile.id);
 
           if (!user) {
-            const email = profile.emails?.[0]?.value;
+            const email = profile.emails?.[0]?.value || "";
 
             if (!email) {
               throw new Error("Google profile did not return an email");
@@ -96,6 +96,7 @@ export function setupAuth(app: Express) {
     )
   );
 
+  // TODO: UNDER DEVELOPMENT
   // passport.use(
   //   new FacebookStrategy(
   //     {
@@ -113,6 +114,7 @@ export function setupAuth(app: Express) {
   //         if (!user) {
   //           user = email
   //             ? await storage.getUserByEmail(email)
+  //             : undefined;
   //             : null;
 
   //           if (user) {
@@ -132,6 +134,7 @@ export function setupAuth(app: Express) {
   //           }
   //         }
 
+  //         done(undefined, user);
   //         done(null, user);
   //       } catch (err) {
   //         done(err as Error);

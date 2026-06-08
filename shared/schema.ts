@@ -82,6 +82,7 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 // === TYPES ===
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpdateUser = Partial<typeof users.$inferInsert>;
 
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
