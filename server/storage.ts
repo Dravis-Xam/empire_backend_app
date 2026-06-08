@@ -1,5 +1,4 @@
 import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser } from "@shared/schema";
-import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser} from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import session from "express-session";
@@ -112,11 +111,6 @@ export class DatabaseStorage implements IStorage {
       provider: "facebook",
     };
     return await this.createUser(insertData);
-  }
-
-  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
-    return user;
   }
 
   // async getUserByFacebookId(facebookId: string): Promise<User | undefined> {
