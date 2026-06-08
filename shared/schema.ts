@@ -17,11 +17,15 @@ export type Role = typeof ROLES[keyof typeof ROLES];
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),
   role: text("role").$type<Role>().default(ROLES.CLIENT).notNull(),
   name: text("name"),
   email: text("email"),
   createdAt: timestamp("created_at").defaultNow(),
+
+  googleId: text("google_id").unique(),
+  facebookId: text("facebook_id").unique(),
+  provider: text("provider").default("local"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
@@ -78,6 +82,7 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 // === TYPES ===
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpdateUser = Partial<typeof users.$inferInsert>;
 
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;

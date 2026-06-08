@@ -8,6 +8,8 @@ import { storage } from "./storage";
 import { User } from "@shared/schema";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+//import { Strategy as FacebookStrategy } from "passport-facebook";
 
 const scryptAsync = promisify(scrypt);
 
@@ -50,6 +52,92 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        callbackURL: "/api/auth/google/callback",
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          let user = await storage.getUserByGoogleId(profile.id);
+
+          if (!user) {
+            const email = profile.emails?.[0]?.value || "";
+
+            user = await storage.getUserByEmail(email);
+
+            if (user) {
+              await storage.updateUser(user.id, {
+                googleId: profile.id,
+                provider: "google",
+              });
+            } else {
+              user = await storage.createUser({
+                username: email,
+                email,
+                password: "",
+                googleId: profile.id,
+                provider: "google",
+                name: profile.displayName,
+              });
+            }
+          }
+
+          return done(null, user);
+        } catch (err) {
+          return done(err as Error);
+        }
+      }
+    )
+  );
+
+  // TODO: UNDER DEVELOPMENT
+  // passport.use(
+  //   new FacebookStrategy(
+  //     {
+  //       clientID: process.env.FACEBOOK_APP_ID!,
+  //       clientSecret: process.env.FACEBOOK_APP_SECRET!,
+  //       callbackURL: "/api/auth/facebook/callback",
+  //       profileFields: ["id", "displayName", "emails"],
+  //     },
+  //     async (_accessToken, _refreshToken, profile, done) => {
+  //       try {
+  //         let user = await storage.getUserByFacebookId(profile.id);
+
+  //         const email = profile.emails?.[0]?.value;
+
+  //         if (!user) {
+  //           user = email
+  //             ? await storage.getUserByEmail(email)
+  //             : undefined;
+
+  //           if (user) {
+  //             await storage.updateUser(user.id, {
+  //               facebookId: profile.id,
+  //               provider: "facebook",
+  //             });
+  //           } else {
+  //             user = await storage.createUser({
+  //               username: email || `fb_${profile.id}`,
+  //               email,
+  //               password: "",
+  //               facebookId: profile.id,
+  //               provider: "facebook",
+  //               name: profile.displayName,
+  //             });
+  //           }
+  //         }
+
+  //         done(undefined, user);
+  //       } catch (err) {
+  //         done(err as Error);
+  //       }
+  //     }
+  //   )
+  // );
+
+  passport.use(
     new LocalStrategy({ passReqToCallback: true }, async (req: any, username, password, done) => {
       try {
         const loginIdentifier = String(req.body?.username ?? req.body?.email ?? username ?? "").trim();
@@ -68,7 +156,7 @@ export function setupAuth(app: Express) {
         }
 
         // Support hashed passwords for registered users.
-        if (user.password.includes(".")) {
+        if (user.password?.includes(".")) {
           const isValid = await comparePasswords(password, user.password);
           if (isValid) {
             return done(null, user);
@@ -94,6 +182,40 @@ export function setupAuth(app: Express) {
       done(err);
     }
   });
+
+  app.get(
+    "/api/auth/google",
+    passport.authenticate("google", {
+      scope: ["profile", "email"],
+    })
+  );
+
+  app.get(
+    "/api/auth/google/callback",
+    passport.authenticate("google", {
+      failureRedirect: "/login",
+    }),
+    (req, res) => {
+      res.redirect("/");
+    }
+  );
+
+  app.get(
+    "/api/auth/facebook",
+    passport.authenticate("facebook", {
+      scope: ["email"],
+    })
+  );
+
+  app.get(
+    "/api/auth/facebook/callback",
+    passport.authenticate("facebook", {
+      failureRedirect: "/login",
+    }),
+    (req, res) => {
+      res.redirect("/");
+    }
+  );
 
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User, info: any) => {
@@ -131,7 +253,7 @@ export function setupAuth(app: Express) {
 
       const created = await storage.createUser({
         ...input,
-        password: await hashPassword(input.password),
+        password: await hashPassword(input?.password?.toString() || ""),
       });
 
       storage.createNotification({
