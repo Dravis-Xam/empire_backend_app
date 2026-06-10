@@ -9,7 +9,7 @@ import { User } from "@shared/schema";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-//import { Strategy as FacebookStrategy } from "passport-facebook";
+import { Strategy as FacebookStrategy } from "passport-facebook";
 
 const scryptAsync = promisify(scrypt);
 
@@ -97,51 +97,50 @@ export function setupAuth(app: Express) {
   );
 
   // TODO: UNDER DEVELOPMENT
-  // passport.use(
-  //   new FacebookStrategy(
-  //     {
-  //       clientID: process.env.FACEBOOK_APP_ID!,
-  //       clientSecret: process.env.FACEBOOK_APP_SECRET!,
-  //       callbackURL: "/api/auth/facebook/callback",
-  //       profileFields: ["id", "displayName", "emails"],
-  //     },
-  //     async (_accessToken, _refreshToken, profile, done) => {
-  //       try {
-  //         let user = await storage.getUserByFacebookId(profile.id);
+  passport.use(
+    new FacebookStrategy(
+      {
+        clientID: process.env.FACEBOOK_APP_ID!,
+        clientSecret: process.env.FACEBOOK_APP_SECRET!,
+        callbackURL: "/api/auth/facebook/callback",
+        profileFields: ["id", "displayName", "emails"],
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          let user = await storage.getUserByFacebookId(profile.id);
 
-  //         const email = profile.emails?.[0]?.value;
+          const email = profile.emails?.[0]?.value;
 
-  //         if (!user) {
-  //           user = email
-  //             ? await storage.getUserByEmail(email)
-  //             : undefined;
-  //             : null;
+          if (!user) {
+            user = email
+              ? await storage.getUserByEmail(email)
+              : undefined;
 
-  //           if (user) {
-  //             await storage.updateUser(user.id, {
-  //               facebookId: profile.id,
-  //               provider: "facebook",
-  //             });
-  //           } else {
-  //             user = await storage.createUser({
-  //               username: email || `fb_${profile.id}`,
-  //               email,
-  //               password: "",
-  //               facebookId: profile.id,
-  //               provider: "facebook",
-  //               name: profile.displayName,
-  //             });
-  //           }
-  //         }
+            if (user) {
+              await storage.updateUser(user.id, {
+                facebookId: profile.id,
+                provider: "facebook",
+              });
+            } else {
+              user = await storage.createUser({
+                username: email || `fb_${profile.id}`,
+                email,
+                password: "",
+                facebookId: profile.id,
+                provider: "facebook",
+                name: profile.displayName,
+              });
+            }
+          }
 
-  //         done(undefined, user);
-  //         done(null, user);
-  //       } catch (err) {
-  //         done(err as Error);
-  //       }
-  //     }
-  //   )
-  // );
+          done(undefined, user);
+          done(null, user);
+        } catch (err) {
+          done(err as Error);
+        }
+      }
+    )
+  );
 
   passport.use(
     new LocalStrategy({ passReqToCallback: true }, async (req: any, username, password, done) => {
@@ -206,22 +205,22 @@ export function setupAuth(app: Express) {
     }
   );
 
-  // app.get(
-  //   "/api/auth/facebook",
-  //   passport.authenticate("facebook", {
-  //     scope: ["email"],
-  //   })
-  // );
+  app.get(
+    "/api/auth/facebook",
+    passport.authenticate("facebook", {
+      scope: ["email"],
+    })
+  );
 
-  // app.get(
-  //   "/api/auth/facebook/callback",
-  //   passport.authenticate("facebook", {
-  //     failureRedirect: "/login",
-  //   }),
-  //   (req, res) => {
-  //     res.redirect("/");
-  //   }
-  // );
+  app.get(
+    "/api/auth/facebook/callback",
+    passport.authenticate("facebook", {
+      failureRedirect: "/login",
+    }),
+    (req, res) => {
+      res.redirect("/");
+    }
+  );
 
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User, info: any) => {
