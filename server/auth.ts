@@ -198,10 +198,10 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", {
-      failureRedirect: "/login",
+      failureRedirect: `${process.env.FRONTEND_URI}/login`,
     }),
     (req, res) => {
-      res.redirect("/");
+      res.redirect(`${process.env.FRONTEND_URI}/`);
     }
   );
 
@@ -215,10 +215,10 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/facebook/callback",
     passport.authenticate("facebook", {
-      failureRedirect: "/login",
+      failureRedirect: `${process.env.FRONTEND_URI}/login`,
     }),
     (req, res) => {
-      res.redirect("/");
+      res.redirect(`${process.env.FRONTEND_URI}/`);
     }
   );
 
