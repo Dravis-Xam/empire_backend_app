@@ -33,7 +33,7 @@ This is a high-performance backend for an e-commerce platform dealing with phone
 
 ### Login via facebook
 `GET /api/auth/facebook`
-- **under development**
+- **Response**: `200 OK` with User object and session cookie
 
 ### Logout
 `POST /api/logout`
