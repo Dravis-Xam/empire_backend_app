@@ -134,7 +134,6 @@ export function setupAuth(app: Express) {
           }
 
           done(undefined, user);
-          done(null, user);
         } catch (err) {
           done(err as Error);
         }
