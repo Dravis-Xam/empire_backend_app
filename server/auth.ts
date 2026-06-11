@@ -35,8 +35,8 @@ export function setupAuth(app: Express) {
 
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "default_secret",
-    resave: false,
-    saveUninitialized: false,
+    resave: true,
+    saveUninitialized: true,
     store: storage.sessionStore,
     proxy: true, // Hint to express-session that a proxy is trusted
     cookie: {
@@ -50,6 +50,7 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+
 
   passport.use(
     new GoogleStrategy(
@@ -199,14 +200,29 @@ export function setupAuth(app: Express) {
     passport.authenticate("google", {
       failureRedirect: `${process.env.LIVE_FRONTEND_URI}/login`,
     }),
-    (req, res) => {
-      // Force an explicit save sequence prior to running the redirect
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save failure during OAuth callback:", err);
-          return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+    (req, res, next) => {
+      // Ensure the user structure exists from Passport's processing layer
+      if (!req.user) {
+        return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+      }
+
+      // Explicitly serialize the authenticated user into the active request session
+      req.login(req.user, (loginErr) => {
+        if (loginErr) {
+          console.error("Passport login serialization error:", loginErr);
+          return next(loginErr);
         }
-        res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
+
+        // Force a physical commit write operation to your session store database
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("Session database persistence write error:", saveErr);
+            return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+          }
+          
+          // Complete the sequence safely now that headers and store data match
+          res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
+        });
       });
     }
   );
