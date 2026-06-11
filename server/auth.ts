@@ -27,25 +27,25 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
-  const isProduction = app.get("env") === "production";
+  // Render always runs behind a proxy and defaults NODE_ENV to production
+  const isProduction = process.env.NODE_ENV === "production" || app.get("env") === "production";
+
+  // Force Express to trust Render's reverse proxy headers (X-Forwarded-Proto, etc.)
+  app.set("trust proxy", 1); 
 
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "default_secret",
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
-    proxy: isProduction,
+    proxy: true, // Hint to express-session that a proxy is trusted
     cookie: {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction, // Must be true in production!
+      sameSite: isProduction ? "none" : "lax", 
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   };
-
-  if (isProduction) {
-    app.set("trust proxy", 1);
-  }
 
   app.use(session(sessionSettings));
   app.use(passport.initialize());
@@ -200,7 +200,14 @@ export function setupAuth(app: Express) {
       failureRedirect: `${process.env.FRONTEND_URI}/login`,
     }),
     (req, res) => {
-      res.redirect(`${process.env.FRONTEND_URI}/`);
+      // Force an explicit save sequence prior to running the redirect
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save failure during OAuth callback:", err);
+          return res.redirect(`${process.env.FRONTEND_URI}/login`);
+        }
+        res.redirect(`${process.env.FRONTEND_URI}/`);
+      });
     }
   );
 
@@ -217,7 +224,14 @@ export function setupAuth(app: Express) {
       failureRedirect: `${process.env.FRONTEND_URI}/login`,
     }),
     (req, res) => {
-      res.redirect(`${process.env.FRONTEND_URI}/`);
+      // Force an explicit save sequence prior to running the redirect
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save failure during OAuth callback:", err);
+          return res.redirect(`${process.env.FRONTEND_URI}/login`);
+        }
+        res.redirect(`${process.env.FRONTEND_URI}/`);
+      });
     }
   );
 
