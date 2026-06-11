@@ -197,16 +197,16 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", {
-      failureRedirect: `${process.env.FRONTEND_URI}/login`,
+      failureRedirect: `${process.env.LIVE_FRONTEND_URI}/login`,
     }),
     (req, res) => {
       // Force an explicit save sequence prior to running the redirect
       req.session.save((err) => {
         if (err) {
           console.error("Session save failure during OAuth callback:", err);
-          return res.redirect(`${process.env.FRONTEND_URI}/login`);
+          return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
         }
-        res.redirect(`${process.env.FRONTEND_URI}/`);
+        res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
       });
     }
   );
@@ -221,16 +221,16 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/facebook/callback",
     passport.authenticate("facebook", {
-      failureRedirect: `${process.env.FRONTEND_URI}/login`,
+      failureRedirect: `${process.env.LIVE_FRONTEND_URI}/login`,
     }),
     (req, res) => {
       // Force an explicit save sequence prior to running the redirect
       req.session.save((err) => {
         if (err) {
           console.error("Session save failure during OAuth callback:", err);
-          return res.redirect(`${process.env.FRONTEND_URI}/login`);
+          return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
         }
-        res.redirect(`${process.env.FRONTEND_URI}/`);
+        res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
       });
     }
   );
