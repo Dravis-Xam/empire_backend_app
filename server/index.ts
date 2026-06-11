@@ -3,12 +3,24 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { setupAuth } from "./auth"; // Ensure this is imported here if it's not handled inside registerRoutes
 
 const app = express();
+
+// 1. Trust Render's upstream proxy headers (Crucial for secure session cookies)
+const isProduction = process.env.NODE_ENV === "production" || app.get("env") === "production";
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
+
+// 2. Strict CORS Configuration - Explicitly map your frontend origin
 app.use(cors({
-  origin: true,
-  credentials: true,
+  origin: isProduction ? process.env.FRONTEND_URI : process.env.LIVE_FRONTEND_URI, // E.g., "https://your-frontend.vercel.app" (NO trailing slash!)
+  credentials: true,               // Permits cross-domain cookie attachments
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -17,6 +29,7 @@ declare module "http" {
   }
 }
 
+// 3. Body Parsers must come BEFORE authentication and routing
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -24,8 +37,10 @@ app.use(
     },
   }),
 );
-
 app.use(express.urlencoded({ extended: false }));
+
+// 4. Initialize Auth Session Layer here (If registerRoutes doesn't do it first thing)
+// setupAuth(app); 
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -34,10 +49,10 @@ export function log(message: string, source = "express") {
     second: "2-digit",
     hour12: true,
   });
-
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Logger middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -56,7 +71,6 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       log(logLine);
     }
   });
@@ -65,6 +79,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Routes and error handlers
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -80,25 +95,9 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  // if (process.env.NODE_ENV === "production") {
-  //   serveStatic(app);
-  // } else {
-  //   const { setupVite } = await import("./vite");
-  //   await setupVite(httpServer, app);
-  // }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
-    {
-      port
-    },
+    { port },
     () => {
       log(`serving on port ${port}`);
     },
