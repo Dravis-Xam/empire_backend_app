@@ -14,11 +14,27 @@ if (isProduction) {
 }
 
 // 2. Strict CORS Configuration - Explicitly map your frontend origin
+const allowedOrigins = [
+  "https://empire-cp-1.vercel.app",
+  "https://empire-cp-1.vercel.app/", // Accommodates trailing slashes cleanly
+  process.env.FRONTEND_URI,
+  process.env.LIVE_FRONTEND_URI
+].filter(Boolean) as string[]; // Filters out undefined variables
+
+// 2. Configure dynamic origin mapping
 app.use(cors({
-  origin: process.env.LIVE_FRONTEND_URI, // E.g., "https://your-frontend.vercel.app" (NO trailing slash!)
-  credentials: true,               // Permits cross-domain cookie attachments
+  origin: (origin, callback) => {
+    // Allow server-to-server requests or matching origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error(`[CORS Error] Request blocked for origin: ${origin}`);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true, // Essential for session cookies over subdomains
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
 }));
 
 const httpServer = createServer(app);
