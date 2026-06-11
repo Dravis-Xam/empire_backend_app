@@ -42,7 +42,7 @@ export function setupAuth(app: Express) {
     cookie: {
       httpOnly: true,
       secure: isProduction, // Must be true in production!
-      sameSite: isProduction ? "none" : "lax", 
+      sameSite: "none", 
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   };
