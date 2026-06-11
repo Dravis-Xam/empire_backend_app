@@ -15,7 +15,7 @@ if (isProduction) {
 
 // 2. Strict CORS Configuration - Explicitly map your frontend origin
 app.use(cors({
-  origin: isProduction ? process.env.FRONTEND_URI : process.env.LIVE_FRONTEND_URI, // E.g., "https://your-frontend.vercel.app" (NO trailing slash!)
+  origin: process.env.LIVE_FRONTEND_URI, // E.g., "https://your-frontend.vercel.app" (NO trailing slash!)
   credentials: true,               // Permits cross-domain cookie attachments
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
