@@ -10,6 +10,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
+import jwt from 'jsonwebtoken'
 
 const scryptAsync = promisify(scrypt);
 
@@ -25,6 +26,9 @@ async function comparePasswords(supplied: string, stored: string) {
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
+
+
+
 
 export function setupAuth(app: Express) {
   // Render always runs behind a proxy and defaults NODE_ENV to production
@@ -213,6 +217,12 @@ export function setupAuth(app: Express) {
           return next(loginErr);
         }
 
+        const token = jwt.sign(
+          { id: (req.user as any).id },
+          process.env.SESSION_SECRET || "default_secret",
+          { expiresIn: "7d" }
+        );
+
         // Force a physical commit write operation to your session store database
         req.session.save((saveErr) => {
           if (saveErr) {
@@ -221,7 +231,7 @@ export function setupAuth(app: Express) {
           }
           
           // Complete the sequence safely now that headers and store data match
-          res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
+          res.redirect(`${process.env.LIVE_FRONTEND_URI}/?token=${token}`);
         });
       });
     }
@@ -311,8 +321,32 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    res.json(req.user);
+  app.get("/api/user", async (req, res) => {
+  // 1. Compatibility check: if a cookie session happened to get through, use it
+    if (req.isAuthenticated()) {
+      return res.json(req.user);
+    }
+
+    // 2. Cross-domain check: look for your bearer authorization header token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    try {
+      // Decode the token using your environment variable secret
+      const decoded = jwt.verify(token, process.env.SESSION_SECRET || "default_secret") as { id: number };
+      const user = await storage.getUser(decoded.id);
+
+      if (!user) {
+        return res.status(401).json({ message: "User account no longer exists" });
+      }
+
+      return res.json(user);
+    } catch (err) {
+      return res.status(401).json({ message: "Session expired or invalid" });
+    }
   });
 }
