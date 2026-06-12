@@ -1,9 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
+//import { serveStatic } from "./static";
 import { createServer } from "http";
-import { setupAuth } from "./auth"; // Ensure this is imported here if it's not handled inside registerRoutes
+//import { setupAuth } from "./auth"; // Ensure this is imported here if it's not handled inside registerRoutes
+import axios from 'axios';
 
 const app = express();
 
@@ -68,6 +69,21 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+const KEEP_ALIVE_URL = "https://empire-backend-app.onrender.com/api/health";
+
+function startKeepAliveJob() {
+  // 600,000 milliseconds = 10 minutes
+  setInterval(async () => {
+    try {
+      console.log(`[Cron Job] Sending keep-alive ping to ${KEEP_ALIVE_URL}...`);
+      const response = await axios.get(KEEP_ALIVE_URL);
+      console.log(`[Cron Job] Server responded with status: ${response.status}`);
+    } catch (error: any) {
+      console.error(`[Cron Job] Keep-alive ping failed: ${error.message}`);
+    }
+  }, 600000); 
+}
+
 // Logger middleware
 app.use((req, res, next) => {
   const start = Date.now();
@@ -116,6 +132,8 @@ app.use((req, res, next) => {
     { port },
     () => {
       log(`serving on port ${port}`);
+
+      startKeepAliveJob();
     },
   );
 })();
