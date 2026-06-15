@@ -314,6 +314,36 @@ export function setupAuth(app: Express) {
     }
   });
 
+  app.post("/api/update-user", async(req, res, next) => {
+    try {
+      const normalizedBody = {
+        ...req.body,
+        username: req.body?.username ?? req.body?.email,
+      };
+
+      const input = api.auth.register.input.parse(normalizedBody);
+      const existing = await storage.getUserByUsername(input.username);
+      if (!existing) {
+        return res.status(400).json({ message: "Username does not exist", field: "username" });
+      }
+
+      const updated = await storage.updateUser(normalizedBody?.id, normalizedBody);
+
+      storage.createNotification({
+        userId: updated.id,
+        message: `Hey ${updated.name}. Your credentials have been updated. For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
+      })
+
+      return res.status(200).json(updated);
+
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid input" });
+      }
+      return next(err);
+    }
+  })
+
   app.post("/api/logout", (req, res, next) => {
     req.logout((err) => {
       if (err) return next(err);
