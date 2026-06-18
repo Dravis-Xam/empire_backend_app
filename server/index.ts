@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
+import * as Sentry from '@sentry/node';
 import { registerRoutes } from "./routes";
 //import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -7,6 +8,16 @@ import { createServer } from "http";
 import axios from 'axios';
 
 const app = express();
+
+// Initialize Sentry if DSN is provided
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+  });
+  // Request handler must be the first middleware on the app
+  app.use(Sentry.Handlers.requestHandler());
+}
 
 // 1. Trust Render's upstream proxy headers (Crucial for secure session cookies)
 const isProduction = process.env.NODE_ENV === "production" || app.get("env") === "production";
@@ -119,6 +130,14 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    if (process.env.SENTRY_DSN) {
+      try {
+        Sentry.captureException(err);
+      } catch (e) {
+        console.error('Failed to send to Sentry:', e);
+      }
+    }
 
     if (res.headersSent) {
       return next(err);

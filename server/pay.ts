@@ -202,6 +202,10 @@ export const pay = async (data: any) => {
     return stkResponse;
   } catch (error: any) {
     console.error('M-Pesa Error:', error.message);
+    try {
+      const capture = await import('./error').then(m => m.default).catch(() => null);
+      if (capture) capture(error);
+    } catch {}
     await storage.createNotification({
       userId: data.userid,
       message: `Payment initiation failed: ${error.message}`
