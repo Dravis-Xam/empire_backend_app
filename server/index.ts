@@ -14,6 +14,32 @@ if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV || 'development',
+    beforeSend(event, hint) {
+      // In production, scrub sensitive fields from the event payload before sending
+      try {
+        const scrubKeys = /password|pass|token|authorization|auth|secret|card|cvv|ssn/i;
+
+        if (event.request && (event.request as any).data) {
+          const data = (event.request as any).data as Record<string, any>;
+          for (const key of Object.keys(data)) {
+            if (scrubKeys.test(key)) {
+              data[key] = '[REDACTED]';
+            }
+          }
+        }
+
+        if (event.user) {
+          // Avoid sending large or sensitive user data
+          if ((event.user as any).email && process.env.NODE_ENV === 'production') {
+            // keep only id in production
+            event.user = { id: (event.user as any).id } as any;
+          }
+        }
+      } catch (e) {
+        // ignore scrub errors
+      }
+      return event;
+    }
   });
   // Request handler must be the first middleware on the app
   app.use(Sentry.Handlers.requestHandler());

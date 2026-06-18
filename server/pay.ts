@@ -170,7 +170,11 @@ export const pay = async (data: any) => {
   try {
     const { amount, phone, userid, orderId } = data;
 
-    const stkResponse = await initiateStkPush({ userid, amount, phone });
+        const stkResponse = await initiateStkPush({ userid, amount, phone });
+        try {
+          const { addBreadcrumb } = await import('./error');
+          addBreadcrumb('Initiated STK push', { userid, amount, phone });
+        } catch {}
 
     // persist a payment record
     try {
@@ -192,11 +196,19 @@ export const pay = async (data: any) => {
         userId: userid,
         message: `Your payment of KES ${amount} has been initiated. Please complete the payment on your phone.`
       });
+      try {
+        const { addBreadcrumb } = await import('./error');
+        addBreadcrumb('STK push succeeded', { checkoutUrl: stkResponse.checkoutUrl });
+      } catch {}
     } else {
       await storage.createNotification({
         userId: userid,
         message: `Payment initiation failed: ${stkResponse.message}`
       });
+      try {
+        const { addBreadcrumb } = await import('./error');
+        addBreadcrumb('STK push failed', { message: stkResponse.message });
+      } catch {}
     }
 
     return stkResponse;

@@ -19,3 +19,13 @@ export function wrapAsync(fn: (...args: any[]) => Promise<any>) {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }
+
+export function addBreadcrumb(message: string, data?: Record<string, any>) {
+  try {
+    if ((Sentry as any).addBreadcrumb) {
+      (Sentry as any).addBreadcrumb({ message, data: data || {}, level: 'info' as any });
+    }
+  } catch (e) {
+    // fail silently
+  }
+}

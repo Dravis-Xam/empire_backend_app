@@ -71,6 +71,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const input = api.orders.create.input.parse(req.body);
       const order = await storage.createOrder(input);
+      try {
+        const { addBreadcrumb } = await import('./error');
+        addBreadcrumb('Order created', { orderId: order.id, userId: order.userId });
+      } catch {}
 
       const userid = (req.user as any).id;
 
@@ -90,11 +94,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // If payment was initiated, `pay` already created a notification about the payment initiation.
       if (!paymentResult) {
         send_invoice_email(order);
-        await storage.createDelivery({
+        const delivery = await storage.createDelivery({
           orderId: order.id,
           status: 'pending',
           trackingInfo: `TRK-${Date.now()}`
         });
+        try {
+          const { addBreadcrumb } = await import('./error');
+          addBreadcrumb('Delivery auto-created', { deliveryId: delivery.id, orderId: order.id });
+        } catch {}
         return res.status(201).json(order);
       }
 
@@ -139,6 +147,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post(api.callbacks.mpesa.path, wrapAsync(async (req, res) => {
     try {
       const body = req.body || {};
+      try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Received M-Pesa callback', { body: body }); } catch {}
 
       // Try to determine orderId from common fields
       const orderId = Number(body.orderId || body.order_id || body?.data?.orderId || body?.data?.order_id);
@@ -151,6 +160,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // Here we assume the callback represents a successful payment; in real integrations,
           // inspect the provider-specific payload to determine success/failure.
           await storage.updatePayment(payment.id, { status: 'completed', providerResponse: body as any });
+          try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Payment marked completed', { paymentId: payment.id, orderId }); } catch {}
 
           // Update order status to processing
           await storage.updateOrderStatus(orderId, 'processing');
@@ -158,11 +168,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // Create delivery if none exists for the order
           const existingDelivery = await storage.getDeliveryByOrder(orderId);
           if (!existingDelivery) {
-            await storage.createDelivery({
+            const newDelivery = await storage.createDelivery({
               orderId: orderId,
               status: 'pending',
               trackingInfo: `TRK-${Date.now()}`
             });
+            try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Delivery created from callback', { deliveryId: newDelivery.id, orderId }); } catch {}
           }
 
           // Notify user
