@@ -135,8 +135,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // CALLBACKS
-  app.post(api.callbacks.mpesa.path, async (_req, res) => {
-    res.status(200).json({ message: "M-Pesa callback received" });
+  app.post(api.callbacks.mpesa.path, async (req, res) => {
+    try {
+      const body = req.body || {};
+
+      // Try to determine orderId from common fields
+      const orderId = Number(body.orderId || body.order_id || body?.data?.orderId || body?.data?.order_id);
+
+      if (!Number.isNaN(orderId) && orderId > 0) {
+        const payments = await storage.getPaymentsForOrder(orderId);
+        if (payments && payments.length > 0) {
+          const payment = payments[0];
+
+          // Here we assume the callback represents a successful payment; in real integrations,
+          // inspect the provider-specific payload to determine success/failure.
+          await storage.updatePayment(payment.id, { status: 'completed', providerResponse: body as any });
+
+          // Update order status to processing
+          await storage.updateOrderStatus(orderId, 'processing');
+
+          // Create delivery if none exists for the order
+          const existingDelivery = await storage.getDeliveryByOrder(orderId);
+          if (!existingDelivery) {
+            await storage.createDelivery({
+              orderId: orderId,
+              status: 'pending',
+              trackingInfo: `TRK-${Date.now()}`
+            });
+          }
+
+          // Notify user
+          await storage.createNotification({
+            userId: payment.userId,
+            message: `Payment received for order #${orderId}. Your order is being processed.`
+          });
+        }
+      }
+
+      return res.status(200).json({ message: 'M-Pesa callback processed' });
+    } catch (err) {
+      console.error('Callback processing failed:', err);
+      return res.status(500).json({ message: 'Callback processing failed' });
+    }
   });
 
   return httpServer;

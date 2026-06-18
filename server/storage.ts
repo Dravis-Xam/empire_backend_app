@@ -41,6 +41,8 @@ export interface IStorage {
   createDelivery(delivery: InsertDelivery): Promise<Delivery>;
   updateDelivery(id: number, delivery: Partial<InsertDelivery>): Promise<Delivery>;
 
+  getDeliveryByOrder(orderId: number): Promise<Delivery | undefined>;
+
   // Notifications
   getNotifications(userId: number): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -48,6 +50,7 @@ export interface IStorage {
   // Payments
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsForOrder(orderId: number): Promise<Payment[]>;
+  updatePayment(id: number, updates: Partial<InsertPayment>): Promise<Payment>;
 
   // Session Store
   sessionStore: any;
@@ -199,6 +202,11 @@ export class DatabaseStorage implements IStorage {
     return delivery;
   }
 
+  async getDeliveryByOrder(orderId: number): Promise<Delivery | undefined> {
+    const [delivery] = await db.select().from(deliveries).where(eq(deliveries.orderId, orderId));
+    return delivery ?? undefined;
+  }
+
   // Notifications
   async getNotifications(userId: number): Promise<Notification[]> {
     return await db.select().from(notifications).where(eq(notifications.userId, userId));
@@ -217,6 +225,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPaymentsForOrder(orderId: number): Promise<Payment[]> {
     return await db.select().from(payments).where(eq(payments.orderId, orderId));
+  }
+
+  async updatePayment(id: number, updates: Partial<InsertPayment>): Promise<Payment> {
+    const [payment] = await db.update(payments).set(updates).where(eq(payments.id, id)).returning();
+    return payment;
   }
 }
 
