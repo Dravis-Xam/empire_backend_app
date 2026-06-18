@@ -6,6 +6,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { ROLES, type InsertUser } from "@shared/schema";
 import { pay, send_invoice_email } from "./pay";
+import { wrapAsync } from "./error";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Set up authentication (passport)
@@ -16,9 +17,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   
   //health route
-  app.get("/api/health", async (_req, res) => {
+  app.get("/api/health", wrapAsync(async (_req, res) => {
     res.json("we are doing okay");
-  });
+  }));
 
   // === PROTECTED ROUTE MIDDLEWARE ===
   const requireAuth = (req: any, res: any, next: any) => {
@@ -29,12 +30,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // === API ROUTES ===
 
   // PRODUCTS
-  app.get(api.products.list.path, async (req, res) => {
+  app.get(api.products.list.path, wrapAsync(async (req, res) => {
     const products = await storage.getProducts();
     res.json(products);
-  });
+  }));
 
-  app.post(api.products.create.path, requireAuth, async (req, res) => {
+  app.post(api.products.create.path, requireAuth, wrapAsync(async (req, res) => {
     try {
       const input = api.products.create.input.parse(req.body);
       const product = await storage.createProduct(input);
@@ -45,28 +46,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       throw err;
     }
-  });
+  }));
 
-  app.patch(api.products.update.path, requireAuth, async (req, res) => {
+  app.patch(api.products.update.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const product = await storage.updateProduct(id, req.body);
     res.json(product);
-  });
+  }));
 
-  app.delete(api.products.delete.path, requireAuth, async (req, res) => {
+  app.delete(api.products.delete.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     await storage.deleteProduct(id);
     res.status(204).send();
-  });
+  }));
 
   // ORDERS
-  app.get(api.orders.list.path, requireAuth, async (req, res) => {
+  app.get(api.orders.list.path, requireAuth, wrapAsync(async (req, res) => {
     const orders = await storage.getOrders();
     res.json(orders);
-  });
+  }));
 
   //make an order
-  app.post(api.orders.create.path, requireAuth, async (req, res) => {
+  app.post(api.orders.create.path, requireAuth, wrapAsync(async (req, res) => {
     try {
       const input = api.orders.create.input.parse(req.body);
       const order = await storage.createOrder(input);
@@ -105,37 +106,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       throw err;
     }
-  });
+    }));
 
-  app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
+  app.patch(api.orders.updateStatus.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const input = api.orders.updateStatus.input.parse(req.body);
     const order = await storage.updateOrderStatus(id, input.status);
     res.json(order);
-  });
+  }));
 
   // DELIVERIES
-  app.get(api.deliveries.list.path, requireAuth, async (req, res) => {
+  app.get(api.deliveries.list.path, requireAuth, wrapAsync(async (req, res) => {
     const deliveries = await storage.getDeliveries();
     res.json(deliveries);
-  });
+  }));
 
-  app.patch(api.deliveries.update.path, requireAuth, async (req, res) => {
+  app.patch(api.deliveries.update.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const delivery = await storage.updateDelivery(id, req.body);
     res.json(delivery);
-  });
+  }));
 
   // NOTIFICATIONS
-  app.get(api.notifications.list.path, requireAuth, async (req, res) => {
+  app.get(api.notifications.list.path, requireAuth, wrapAsync(async (req, res) => {
     // Assuming req.user is populated by passport
     const userId = (req.user as any).id;
     const notes = await storage.getNotifications(userId);
     res.json(notes);
-  });
+  }));
 
   // CALLBACKS
-  app.post(api.callbacks.mpesa.path, async (req, res) => {
+  app.post(api.callbacks.mpesa.path, wrapAsync(async (req, res) => {
     try {
       const body = req.body || {};
 
@@ -177,7 +178,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error('Callback processing failed:', err);
       return res.status(500).json({ message: 'Callback processing failed' });
     }
-  });
+  }));
 
   return httpServer;
 }

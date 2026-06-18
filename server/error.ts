@@ -13,3 +13,9 @@ export function captureError(err: unknown) {
 }
 
 export default captureError;
+
+export function wrapAsync(fn: (...args: any[]) => Promise<any>) {
+  return function (req: any, res: any, next: any) {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
