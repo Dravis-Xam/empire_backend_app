@@ -167,35 +167,51 @@ export const initiateStkPush = async (
 // };
 
 export const pay = async (data: any) => {
+  try {
+    const { amount, phone, userid, orderId } = data;
+
+    const stkResponse = await initiateStkPush({ userid, amount, phone });
+
+    // persist a payment record
     try {
-        const { amount, phone, userid } = data;
-
-        const stkResponse = await initiateStkPush({ userid, amount, phone });
-
-        if (stkResponse.success) {
-            await storage.createNotification({
-                userId: userid,
-                message: `Your payment of KES ${amount} has been initiated. Please complete the payment on your phone.`
-            });
-        } else {
-            await storage.createNotification({
-                userId: userid,
-                message: `Payment initiation failed: ${stkResponse.message}`
-            });
-        } 
-        return stkResponse;
-    } catch (error: any) {
-        console.error('M-Pesa Error:', error.message);
-        await storage.createNotification({
-            userId: data.userid,
-            message: `Payment initiation failed: ${error.message}`
-        });
-        return {
-        success: false,
-        message: 'Internal server error',
-        error: error.message,
-        };
+      await storage.createPayment({
+      orderId: orderId,
+      userId: userid,
+      amount: String(amount),
+      method: 'stk_push',
+      status: stkResponse.success ? 'initiated' : 'failed',
+      checkoutUrl: stkResponse.checkoutUrl || null,
+      providerResponse: { message: stkResponse.message }
+      });
+    } catch (err) {
+      console.error('Failed to persist payment:', err);
     }
+
+    if (stkResponse.success) {
+      await storage.createNotification({
+        userId: userid,
+        message: `Your payment of KES ${amount} has been initiated. Please complete the payment on your phone.`
+      });
+    } else {
+      await storage.createNotification({
+        userId: userid,
+        message: `Payment initiation failed: ${stkResponse.message}`
+      });
+    }
+
+    return stkResponse;
+  } catch (error: any) {
+    console.error('M-Pesa Error:', error.message);
+    await storage.createNotification({
+      userId: data.userid,
+      message: `Payment initiation failed: ${error.message}`
+    });
+    return {
+    success: false,
+    message: 'Internal server error',
+    error: error.message,
+    };
+  }
 };
 
 

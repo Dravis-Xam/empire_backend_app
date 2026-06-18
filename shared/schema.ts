@@ -79,6 +79,21 @@ export const notifications = pgTable("notifications", {
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 
+// === PAYMENTS ===
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  userId: integer("user_id").notNull(),
+  amount: decimal("amount").notNull(),
+  method: text("method").notNull().default("stk_push"),
+  status: text("status").notNull().default("initiated"), // initiated, pending, completed, failed
+  checkoutUrl: text("checkout_url"),
+  providerResponse: jsonb("provider_response"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+
 // === TYPES ===
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -95,3 +110,6 @@ export type InsertDelivery = z.infer<typeof insertDeliverySchema>;
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;

@@ -1,4 +1,4 @@
-import { users, products, orders, deliveries, notifications, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, UpdateUser } from "@shared/schema";
+import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import session from "express-session";
@@ -44,6 +44,10 @@ export interface IStorage {
   // Notifications
   getNotifications(userId: number): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
+
+  // Payments
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  getPaymentsForOrder(orderId: number): Promise<Payment[]>;
 
   // Session Store
   sessionStore: any;
@@ -203,6 +207,16 @@ export class DatabaseStorage implements IStorage {
   async createNotification(insertNotification: InsertNotification): Promise<Notification> {
     const [notification] = await db.insert(notifications).values(insertNotification).returning();
     return notification;
+  }
+
+  // Payments
+  async createPayment(insertPayment: InsertPayment): Promise<Payment> {
+    const [payment] = await db.insert(payments).values(insertPayment).returning();
+    return payment;
+  }
+
+  async getPaymentsForOrder(orderId: number): Promise<Payment[]> {
+    return await db.select().from(payments).where(eq(payments.orderId, orderId));
   }
 }
 

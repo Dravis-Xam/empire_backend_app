@@ -65,31 +65,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(orders);
   });
 
+  //make an order
   app.post(api.orders.create.path, requireAuth, async (req, res) => {
-    const input = api.orders.create.input.parse(req.body);
-    const order = await storage.createOrder(input);
+    try {
+      const input = api.orders.create.input.parse(req.body);
+      const order = await storage.createOrder(input);
 
-    const userid = (req.user as any).id;
-    if (req.body?.amount && req.body?.phone) {
-      await pay({...req.body, userid});
+      const userid = (req.user as any).id;
+
+      // If payment details are provided, initiate payment and return checkout URL
+      let paymentResult: any = null;
+      if (req.body?.amount && req.body?.phone) {
+        paymentResult = await pay({ amount: Number(req.body.amount), phone: String(req.body.phone), userid, orderId: order.id });
+      }
+
+      const username = await storage.getUser(order.userId).then(value => value?.name)
+      storage.createNotification({
+        userId: order.userId,
+        message: `Hey ${username}, you have made a new order. <a href="/orders/${order.id}">Tap here to view details</a> For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
+      })
+
+      // If payment was NOT initiated, send invoice and auto-create delivery immediately.
+      // If payment was initiated, `pay` already created a notification about the payment initiation.
+      if (!paymentResult) {
+        send_invoice_email(order);
+        await storage.createDelivery({
+          orderId: order.id,
+          status: 'pending',
+          trackingInfo: `TRK-${Date.now()}`
+        });
+        return res.status(201).json(order);
+      }
+
+      // Return order with payment info (checkout URL if available)
+      return res.status(201).json({ order, payment: paymentResult });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
     }
-
-    const username = await storage.getUser(order.userId).then(value => value?.name)
-    storage.createNotification({
-      userId: order.userId,
-      message: `Hey ${username}, you have made a new order. <a href="/orders/${order.id}">Tap here to view details</a> For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
-    })
-
-    // Create delivery if notification needed or just notify logic
-    send_invoice_email(order);
-    // Auto-create delivery for simplified logic
-    await storage.createDelivery({
-      orderId: order.id,
-      status: 'pending',
-      trackingInfo: `TRK-${Date.now()}`
-    });
-
-    res.status(201).json(order);
   });
 
   app.patch(api.orders.updateStatus.path, requireAuth, async (req, res) => {
