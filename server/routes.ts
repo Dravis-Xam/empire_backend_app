@@ -48,6 +48,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }))
 
+  app.post(api.products.createUsingBarcode.path, wrapAsync(async (req, res) => {
+    const input = api.products.create.input.parse(req.body);
+    const product = await storage.createProductByBarcode(input);
+    res.status(201).json(product);
+  }))
+
   app.post(api.products.create.path, requireAuth, wrapAsync(async (req, res) => {
     try {
       const input = api.products.create.input.parse(req.body);

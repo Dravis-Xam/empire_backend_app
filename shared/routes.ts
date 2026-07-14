@@ -68,6 +68,15 @@ export const api = {
       responses: {
         200: z.array(z.custom<typeof products.$inferSelect>())
       } 
+    },  
+    createUsingBarcode: {
+      method: 'POST' as const,
+      path: '/api/products/barcode',
+      input: insertProductSchema,
+      responses: {
+        201: z.custom<typeof products.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
     },
     create: {
       method: 'POST' as const,
