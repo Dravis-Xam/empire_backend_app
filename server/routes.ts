@@ -239,6 +239,7 @@ async function seedDatabase() {
       name: "iPhone 15 Pro",
       description: "The latest iPhone",
       price: "999.00",
+      cost: "700.00",
       category: "phone",
       stock: 50,
       imageUrl: "https://images.unsplash.com/photo-1696446701796-da61225697cc?w=800&q=80"
@@ -250,6 +251,7 @@ async function seedDatabase() {
       price: "1299.00",
       category: "laptop",
       stock: 20,
+      cost: "900.00",
       imageUrl: "https://images.unsplash.com/photo-1517336714731-489689fd1ca4?w=800&q=80"
     });
 
@@ -257,6 +259,7 @@ async function seedDatabase() {
       name: "AirPods Pro",
       description: "Noise cancelling earbuds",
       price: "249.00",
+      cost: "150.00",
       category: "accessory",
       stock: 100,
       imageUrl: "https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?w=800&q=80"
