@@ -51,6 +51,10 @@ This is a high-performance backend for an e-commerce platform dealing with phone
 `GET /api/products`
 - **Response**: `200 OK` - Array of all devices/accessories.
 
+### Get Products by their barcode
+ `GET /api/barcode/fetch-item`
+ - **Response**: `200 OK` - That Device with barcode provided.
+
 ### Create Product
 `POST /api/products` (Requires Auth)
 - **Body**: `{ name, description, price, category, stock, imageUrl }`
