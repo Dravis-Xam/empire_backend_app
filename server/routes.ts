@@ -35,6 +35,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(products);
   }));
 
+  app.get(api.products.getItem.path, wrapAsync(async (res, req) => {
+    const barCode = String(req.params);
+    try {
+      const product = await storage.getProductByBarcode(barCode);
+      res.json(product);
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({message: e.message})
+      }
+      throw e;
+    }
+  }))
+
   app.post(api.products.create.path, requireAuth, wrapAsync(async (req, res) => {
     try {
       const input = api.products.create.input.parse(req.body);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertNotificationSchema, users, products, orders, deliveries, notifications } from './schema';
 import type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification } from './schema';
+import { response } from 'express';
 
 export type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification };
 
@@ -60,6 +61,13 @@ export const api = {
       responses: {
         200: z.array(z.custom<typeof products.$inferSelect>()),
       },
+    },
+    getItem: {
+      method: 'GET' as const,
+      path: '/api/barcode/fetch-item',
+      responses: {
+        200: z.array(z.custom<typeof products.$inferSelect>())
+      } 
     },
     create: {
       method: 'POST' as const,

@@ -40,6 +40,7 @@ export const products = pgTable("products", {
   stock: integer("stock").notNull().default(0),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
+  barCode: text('barcode'),
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
