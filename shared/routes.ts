@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertNotificationSchema, users, products, orders, deliveries, notifications } from './schema';
+import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertSaleSchema, users, products, orders, deliveries, notifications, insertPaymentSchema } from './schema';
 import type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification } from './schema';
 
 export type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification };
+
 
 export const errorSchemas = {
   validation: z.object({
@@ -119,6 +120,24 @@ export const api = {
       path: '/api/orders',
       responses: {
         200: z.array(z.custom<typeof orders.$inferSelect>()),
+      },
+    },
+    createSale: {
+      method: 'POST' as const,
+      path: '/api/orders/sale',
+      input: insertSaleSchema,
+      responses: {
+        201: z.custom<typeof orders.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    createPayment: {
+      method: 'POST' as const,
+      path: '/api/orders/purchase',
+      input: insertPaymentSchema,
+      responses: {
+        201: z.custom<typeof orders.$inferSelect>(),
+        400: errorSchemas.validation,
       },
     },
     create: {

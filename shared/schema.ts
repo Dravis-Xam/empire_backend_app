@@ -2,6 +2,12 @@ import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const insertSaleSchema = z.object({
+  barcode: z.string().uuid(),
+  quantity_sold: z.number().min(1),
+  timestamp: z.date(),
+});
+
 // === ROLES ===
 export const ROLES = {
   ADMIN: "admin",
@@ -85,11 +91,11 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 // === PAYMENTS ===
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(),
-  userId: integer("user_id").notNull(),
+  orderId: integer("order_id"),
+  userId: integer("user_id").notNull().default(Math.floor(Math.random() * 1000000)),
   amount: decimal("amount").notNull(),
   method: text("method").notNull().default("stk_push"),
-  status: text("status").notNull().default("initiated"), // initiated, pending, completed, failed
+  status: text("status").notNull().default("initiated"), 
   checkoutUrl: text("checkout_url"),
   providerResponse: jsonb("provider_response"),
   createdAt: timestamp("created_at").defaultNow(),
