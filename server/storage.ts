@@ -30,6 +30,7 @@ export interface IStorage {
   createProductByBarcode(product: InsertProduct): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
+  updateProductByBarcode(barcode: string, product: Partial<InsertProduct>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
 
   // Orders
@@ -172,6 +173,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateProduct(id: number, updates: Partial<InsertProduct>): Promise<Product> {
     const [product] = await db.update(products).set(updates).where(eq(products.id, id)).returning();
+    return product;
+  }
+
+  async updateProductByBarcode(barcode: string, updates: Partial<InsertProduct>): Promise<Product> {
+    const [product] = await db.update(products).set(updates).where(eq(products.barCode, barcode)).returning();
     return product;
   }
 

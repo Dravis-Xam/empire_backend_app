@@ -36,7 +36,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }));
 
   app.get(api.products.getItem.path, wrapAsync(async (req, res) => {
-    // Expecting barcode via query param `barcode` or body
     const barCode = String(req.query?.barcode ?? req.body?.barcode ?? "");
     try {
       const product = await storage.getProductByBarcode(barCode);
@@ -73,7 +72,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch(api.products.update.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
+    const existingProduct = await storage.getProduct(id);
+    if (!existingProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
     const product = await storage.updateProduct(id, req.body);
+    res.json(product);
+  }));
+
+  app.patch(api.products.updateByBarcode.path, requireAuth, wrapAsync(async (req, res) => {
+    const barcode = String(req.body?.barcode);
+
+    const existingProduct = await storage.getProductByBarcode(barcode);
+    if (!existingProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    const product = await storage.updateProductByBarcode(barcode, req.body);
     res.json(product);
   }));
 
@@ -240,6 +254,7 @@ async function seedDatabase() {
       description: "The latest iPhone",
       price: "999.00",
       cost: "700.00",
+      brand: "Apple",
       category: "phone",
       stock: 50,
       imageUrl: "https://images.unsplash.com/photo-1696446701796-da61225697cc?w=800&q=80"
@@ -250,6 +265,7 @@ async function seedDatabase() {
       description: "Super thin, super fast",
       price: "1299.00",
       category: "laptop",
+      brand: "Apple",
       stock: 20,
       cost: "900.00",
       imageUrl: "https://images.unsplash.com/photo-1517336714731-489689fd1ca4?w=800&q=80"
@@ -259,6 +275,7 @@ async function seedDatabase() {
       name: "AirPods Pro",
       description: "Noise cancelling earbuds",
       price: "249.00",
+      brand: "Apple",
       cost: "150.00",
       category: "accessory",
       stock: 100,

@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertNotificationSchema, users, products, orders, deliveries, notifications } from './schema';
 import type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification } from './schema';
-import { response } from 'express';
 
 export type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification };
 
@@ -64,7 +63,7 @@ export const api = {
     },
     getItem: {
       method: 'GET' as const,
-      path: '/api/barcode/fetch-item',
+      path: '/api/barcode/fetch-item/:barcode',
       responses: {
         200: z.array(z.custom<typeof products.$inferSelect>())
       } 
@@ -90,6 +89,15 @@ export const api = {
     update: {
       method: 'PATCH' as const,
       path: '/api/products/:id',
+      input: insertProductSchema.partial(),
+      responses: {
+        200: z.custom<typeof products.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    updateByBarcode: {
+      method: 'PATCH' as const,
+      path: '/api/products/:barcode',
       input: insertProductSchema.partial(),
       responses: {
         200: z.custom<typeof products.$inferSelect>(),

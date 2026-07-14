@@ -34,6 +34,7 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true, creat
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  brand: text("brand").notNull(),
   description: text("description").notNull(),
   price: decimal("price").notNull(),
   cost: decimal("cost").notNull(),
