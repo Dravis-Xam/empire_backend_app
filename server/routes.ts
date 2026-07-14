@@ -35,18 +35,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(products);
   }));
 
-  app.get(api.products.getItem.path, wrapAsync(async (res, req) => {
-    const barCode = String(req.params);
+  app.get(api.products.getItem.path, wrapAsync(async (req, res) => {
+    // Expecting barcode via query param `barcode` or body
+    const barCode = String(req.query?.barcode ?? req.body?.barcode ?? "");
     try {
       const product = await storage.getProductByBarcode(barCode);
-      res.json(product);
+      return res.json(product);
     } catch (e) {
       if (e instanceof z.ZodError) {
-        return res.status(400).json({message: e.message})
+        return res.status(400).json({ message: e.message });
       }
       throw e;
     }
-  }))
+  }));
 
   app.post(api.products.createUsingBarcode.path, wrapAsync(async (req, res) => {
     const input = api.products.create.input.parse(req.body);
