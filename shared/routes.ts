@@ -66,9 +66,10 @@ export const api = {
       method: 'GET' as const,
       path: '/api/barcode/fetch-item/:barcode',
       responses: {
-        200: z.array(z.custom<typeof products.$inferSelect>())
-      } 
-    },  
+        200: z.custom<typeof products.$inferSelect>(),  // was z.array(...)
+        404: errorSchemas.notFound,
+      },
+    }, 
     createUsingBarcode: {
       method: 'POST' as const,
       path: '/api/products/barcode/create-item',

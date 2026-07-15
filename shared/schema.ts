@@ -3,9 +3,9 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const insertSaleSchema = z.object({
-  barcode: z.string().regex(/^\d+$/, 'Barcode must contain only numbers'), // ✅ Numeric string validation
+  barcode: z.string().regex(/^\d+$/, 'Barcode must contain only numbers'),
   quantity_sold: z.number().min(1),
-  timestamp: z.date().optional(),
+  timestamp: z.coerce.date().optional(),
 });
 
 // === ROLES ===

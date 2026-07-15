@@ -109,12 +109,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(404).json({ message: "Product not found" });
     }
 
+    // Guard against overselling
+    if (product.stock < input.quantity_sold) {
+      return res.status(400).json({ message: `Insufficient stock. Only ${product.stock} available.` });
+    }
+
     const payload = {
       amount: ((product.price as any) * input.quantity_sold).toString(),
       status: 'completed',
       method: 'cash'
-    }
+    };
     const tx = await storage.createPayment(payload);
+
+    // Decrement stock now that payment succeeded
+    await storage.updateProduct(product.id, { stock: product.stock - input.quantity_sold });
 
     res.status(201).json(tx.status);
   }));
