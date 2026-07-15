@@ -156,8 +156,8 @@ export class DatabaseStorage implements IStorage {
     return product;
   }
 
-  async getProductByBarcode(barCode: string): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.barCode, barCode));
+  async getProductByBarcode(barcode: string): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.barcode, barcode));
     return product;
   }
 
@@ -177,7 +177,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProductByBarcode(barcode: string, updates: Partial<InsertProduct>): Promise<Product> {
-    const [product] = await db.update(products).set(updates).where(eq(products.barCode, barcode)).returning();
+    const [product] = await db.update(products).set(updates).where(eq(products.barcode, barcode)).returning();
     return product;
   }
 
