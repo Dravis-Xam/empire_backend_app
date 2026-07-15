@@ -37,18 +37,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get(api.products.getItem.path, wrapAsync(async (req, res) => {
     const barCode = String(req.query?.barcode ?? req.body?.barcode ?? "");
-    try {
-      const product = await storage.getProductByBarcode(barCode);
-      if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-      }
-      return res.json(product);
-    } catch (e) {
-      if (e instanceof z.ZodError) {
-        return res.status(400).json({ message: e.message });
-      }
-      throw e;
+    const product = await storage.getProductByBarcode(barCode);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
     }
+    return res.json(product);
   }));
 
   app.post(api.products.createUsingBarcode.path, wrapAsync(async (req, res) => {
