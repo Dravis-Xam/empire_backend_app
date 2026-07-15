@@ -3,9 +3,9 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const insertSaleSchema = z.object({
-  barcode: z.string().uuid(),
+  barcode: z.string().regex(/^\d+$/, 'Barcode must contain only numbers'), // ✅ Numeric string validation
   quantity_sold: z.number().min(1),
-  timestamp: z.date(),
+  timestamp: z.date().optional(),
 });
 
 // === ROLES ===
@@ -44,11 +44,11 @@ export const products = pgTable("products", {
   description: text("description").notNull(),
   price: decimal("price").notNull(),
   cost: decimal("cost").notNull(),
-  category: text("category").notNull(), // phone, laptop, accessory
+  category: text("category").notNull(),
   stock: integer("stock").notNull().default(0),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
-  barcode: text('barcode'),
+  barcode: text('barcode').unique(), // Added notNull and unique
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });

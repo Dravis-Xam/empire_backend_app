@@ -80,7 +80,7 @@ export const api = {
     },
     create: {
       method: 'POST' as const,
-      path: '/api/products',
+      path: '/api/products/',
       input: insertProductSchema,
       responses: {
         201: z.custom<typeof products.$inferSelect>(),
@@ -98,7 +98,7 @@ export const api = {
     },
     updateByBarcode: {
       method: 'PATCH' as const,
-      path: '/api/products/:barcode',
+      path: '/api/products/barcode/:barcode',
       input: insertProductSchema.partial(),
       responses: {
         200: z.custom<typeof products.$inferSelect>(),
