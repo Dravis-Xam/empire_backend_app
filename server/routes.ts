@@ -75,9 +75,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }));
 
   app.patch(api.products.updateByBarcode.path, requireAuth, wrapAsync(async (req, res) => {
-    const barcode = String(req.body?.barcode);
+    const barcode = String(req.params.barcode);
 
     const existingProduct = await storage.getProductByBarcode(barcode);
+    
     if (!existingProduct) {
       return res.status(404).json({ message: "Product not found" });
     }

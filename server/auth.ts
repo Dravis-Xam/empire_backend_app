@@ -159,10 +159,10 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Invalid credentials" });
         }
 
-        // Accept seeded plain-text users for local demo environments.
-        if (user.password === password) {
-          return done(null, user);
-        }
+        // // Accept seeded plain-text users for local demo environments.
+        // if (await comparePasswords(password, user?.password)) {
+        //   return done(null, user);
+        // }
 
         // Support hashed passwords for registered users.
         if (user?.password?.includes(".")) {
