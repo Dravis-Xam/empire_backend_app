@@ -71,7 +71,7 @@ export const api = {
     },  
     createUsingBarcode: {
       method: 'POST' as const,
-      path: '/api/products/barcode',
+      path: '/api/products/barcode/create-item',
       input: insertProductSchema,
       responses: {
         201: z.custom<typeof products.$inferSelect>(),
