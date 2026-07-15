@@ -36,8 +36,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }));
 
   app.get(api.products.getItem.path, wrapAsync(async (req, res) => {
-    const barCode = String(req.query?.barcode ?? req.body?.barcode ?? "");
-    const product = await storage.getProductByBarcode(barCode);
+    const barcode = String(req.params.barcode);
+    const product = await storage.getProductByBarcode(barcode);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
