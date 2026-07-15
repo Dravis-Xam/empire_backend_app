@@ -99,31 +99,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // make sale
   app.post(api.orders.createSale.path, requireAuth, wrapAsync(async (req, res) => {
-    try {
-      const input = api.orders.createSale.input.parse(req.body);
-      const barcode = input?.barcode;
-      const product = await storage.getProductByBarcode(barcode);
-      if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-      }
-      const payload = {
-        amount: ((product.price as any) * input.quantity_sold).toString(),
-        status: 'completed',
-        method: 'cash'
-      }
-      const tx = await storage.createPayment(payload);
-      const username = await storage.getUser(tx.userId).then(value => value?.name)
-      storage.createNotification({
-        userId: tx.userId,
-        message: `Hey ${username || 'there'}, you have made a new order. <a href="/orders/${tx.id}">Tap here to view details</a> For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
-      })
-      res.status(201).json(tx.status);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
-      }
-      throw err;
+    const input = api.orders.createSale.input.parse(req.body);
+    const barcode = input?.barcode;
+    const product = await storage.getProductByBarcode(barcode);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
     }
+
+    const payload = {
+      amount: ((product.price as any) * input.quantity_sold).toString(),
+      status: 'completed',
+      method: 'cash'
+    }
+    const tx = await storage.createPayment(payload);
+
+    res.status(201).json(tx.status);
   }));
 
   //make an order

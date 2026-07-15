@@ -124,7 +124,7 @@ export const api = {
     },
     createSale: {
       method: 'POST' as const,
-      path: '/api/orders/sale',
+      path: '/api/orders/create-sale',
       input: insertSaleSchema,
       responses: {
         201: z.custom<typeof orders.$inferSelect>(),
