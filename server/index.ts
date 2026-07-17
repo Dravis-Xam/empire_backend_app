@@ -54,7 +54,9 @@ if (isProduction) {
 // 2. Strict CORS Configuration - Explicitly map your frontend origin
 const allowedOrigins = [
   "https://empire-cp-1.vercel.app",
-  "https://empire-cp-1.vercel.app/", // Accommodates trailing slashes cleanly
+  "https://empire-cp-1.vercel.app/",
+  "https://empire-crm-psi.vercel.app/",
+  "https://empire-crm-psi.vercel.app",
   process.env.FRONTEND_URI,
   process.env.LIVE_FRONTEND_URI
 ].filter(Boolean) as string[]; // Filters out undefined variables

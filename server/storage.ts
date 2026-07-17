@@ -1,6 +1,6 @@
-import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser } from "@shared/schema";
+import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser, type PurchaseOrder, type InsertPurchaseOrder, purchaseOrders } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
@@ -29,6 +29,7 @@ export interface IStorage {
   getProductByBarcode(barCode: string):  Promise<Product | undefined>;
   createProductByBarcode(product: InsertProduct): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
+  createBulkProducts(product: InsertProduct[]): Promise<Product []>
   updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product>;
   updateProductByBarcode(barcode: string, product: Partial<InsertProduct>): Promise<Product>;
   deleteProduct(id: number): Promise<void>;
@@ -38,6 +39,11 @@ export interface IStorage {
   getOrder(id: number): Promise<Order | undefined>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrderStatus(id: number, status: string): Promise<Order>;
+
+  getPurchaseOrders(): Promise<PurchaseOrder[]>;
+  getPurchaseOrder(id: number): Promise<PurchaseOrder | undefined>;
+  createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
+  updatePurchaseOrder(id: number, updates: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder>;
 
   // Deliveries
   getDeliveries(): Promise<Delivery[]>;
@@ -171,6 +177,44 @@ export class DatabaseStorage implements IStorage {
     return product;
   }
 
+async createBulkProducts(productsList: InsertProduct[]): Promise<Product[]> {
+    if (productsList.length === 0) {
+      return [];
+    }
+
+    const insertedProducts = await db
+      .insert(products)
+      .values(productsList)
+      .returning();
+
+    return insertedProducts;
+  }
+
+async deleteBulkProductsByBarcode(barcodes: string[]): Promise<Product[]> {
+    
+    if (barcodes.length === 0) {
+      return [];
+    }
+
+    
+    const deletedProducts = await db
+      .delete(products)
+      .where(inArray(products.barcode, barcodes)) 
+      .returning();
+
+    return deletedProducts;
+  }
+
+async deleteBulkProductsById(ids: number[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+
+  return await db
+    .delete(products)
+    .where(inArray(products.id, ids))
+    .returning();
+}
+
+
   async updateProduct(id: number, updates: Partial<InsertProduct>): Promise<Product> {
     const [product] = await db.update(products).set(updates).where(eq(products.id, id)).returning();
     return product;
@@ -204,6 +248,43 @@ export class DatabaseStorage implements IStorage {
     const [order] = await db.update(orders).set({ status }).where(eq(orders.id, id)).returning();
     return order;
   }
+
+  async getPurchaseOrders(): Promise<PurchaseOrder[]> {
+    return await db.select().from(purchaseOrders).orderBy(purchaseOrders.createdAt);
+  }
+
+  async getPurchaseOrder(id: number): Promise<PurchaseOrder | undefined> {
+    const [order] = await db.select().from(purchaseOrders).where(eq(purchaseOrders.id, id));
+    return order;
+  }
+
+  async createPurchaseOrder(orderData: InsertPurchaseOrder): Promise<PurchaseOrder> {
+    // Calculate total amount from items
+    const items = orderData.items as any[];
+    const totalAmount = items.reduce((sum: number, item: any) => {
+      return sum + (item.quantity * item.unitCost);
+    }, 0);
+
+    const [order] = await db.insert(purchaseOrders)
+      .values({
+        ...orderData,
+        totalAmount: totalAmount.toString(),
+        status: 'draft',
+        items: items,
+      })
+      .returning();
+
+    return order;
+  }
+
+  async updatePurchaseOrder(id: number, updates: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder> {
+    const [order] = await db.update(purchaseOrders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(orders.id, id))
+      .returning();
+    return order;
+  }
+
 
   // Deliveries
   async getDeliveries(): Promise<Delivery[]> {

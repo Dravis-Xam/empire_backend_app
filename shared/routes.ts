@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertSaleSchema, users, products, orders, deliveries, notifications, insertPaymentSchema } from './schema';
+import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertSaleSchema, users, products, orders, deliveries, notifications, insertPaymentSchema, purchaseOrders } from './schema';
 import type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification } from './schema';
+import { response } from 'express';
 
 export type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification };
 
@@ -88,6 +89,15 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    createBulk: {
+      method: 'POST' as const,
+      path: '/api/products/bulk',
+      input: z.array(insertProductSchema),
+      responses: {
+        201: z.custom<typeof products.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
     update: {
       method: 'PATCH' as const,
       path: '/api/products/:id',
@@ -114,6 +124,23 @@ export const api = {
         404: errorSchemas.notFound,
       },
     },
+    deleteBulk: {
+      method: "POST" as const,
+      path: '/api/products/delete/barcode',
+      response: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      }
+    },
+    deleteBulkId: {
+      method: "POST" as const,
+      path: "/api/products/delete/id",
+      responses: {
+          204: z.void(),
+        404: errorSchemas.notFound,
+      }
+
+    }
   },
   orders: {
     list: {
@@ -156,6 +183,66 @@ export const api = {
       input: z.object({ status: z.string() }),
       responses: {
         200: z.custom<typeof orders.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  purchaseOrders: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/purchase-orders',
+      responses: {
+        200: z.array(z.custom<typeof purchaseOrders.$inferSelect>()),
+      },
+    },
+    getItem: {
+      method: 'GET' as const,
+      path: '/api/purchase-orders/:id',
+      responses: {
+        200: z.custom<typeof purchaseOrders.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/purchase-orders',
+      input: z.object({
+        supplierName: z.string(),
+        supplierEmail: z.string().email().optional(),
+        notes: z.string().optional(),
+        items: z.array(z.object({
+          productId: z.number(),
+          productName: z.string(),
+          quantity: z.number().min(1),
+          unitCost: z.number().min(0),
+        })),
+      }),
+      responses: {
+        201: z.custom<typeof purchaseOrders.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    validate: {
+      method: 'POST' as const,
+      path: '/api/purchase-orders/:id/validate',
+      responses: {
+        200: z.custom<typeof purchaseOrders.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    send: {
+      method: 'POST' as const,
+      path: '/api/purchase-orders/:id/send',
+      responses: {
+        200: z.object({ message: z.string() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    complete: {
+      method: 'POST' as const,
+      path: '/api/purchase-orders/:id/complete',
+      responses: {
+        200: z.custom<typeof purchaseOrders.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },

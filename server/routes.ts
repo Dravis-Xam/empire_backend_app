@@ -64,6 +64,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }));
 
+  app.post(api.products.createBulk.path, requireAuth, wrapAsync( async (req, res) => {
+    try {
+      const input = api.products.createBulk.input.parse(req.body);
+      const product = await storage.createBulkProducts(input);
+        res.status(201).json(product);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  }))
+
   app.patch(api.products.update.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const existingProduct = await storage.getProduct(id);
@@ -93,6 +106,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await storage.deleteProduct(id);
     res.status(204).send();
   }));
+
+
 
   // ORDERS
   app.get(api.orders.list.path, requireAuth, wrapAsync(async (req, res) => {
@@ -177,12 +192,150 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     }));
 
+
   app.patch(api.orders.updateStatus.path, requireAuth, wrapAsync(async (req, res) => {
     const id = parseInt(String(req.params.id), 10);
     const input = api.orders.updateStatus.input.parse(req.body);
     const order = await storage.updateOrderStatus(id, input.status);
     res.json(order);
   }));
+
+// PURCHASE ORDERS
+app.get('/api/purchase-orders', requireAuth, wrapAsync(async (req, res) => {
+  const orders = await storage.getPurchaseOrders();
+  res.json(orders);
+}));
+
+app.get('/api/purchase-orders/:id', requireAuth, wrapAsync(async (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = await storage.getPurchaseOrder(id);
+  if (!order) {
+    return res.status(404).json({ message: 'Purchase order not found' });
+  }
+  res.json(order);
+}));
+
+app.post('/api/purchase-orders', requireAuth, wrapAsync(async (req, res) => {
+  try {
+    const input = api.purchaseOrders.create.input.parse(req.body);
+    const userId = (req.user as any).id;
+
+    // Calculate total costs for each item
+    const items = input.items.map(item => ({
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      totalCost: item.quantity * item.unitCost,
+    }));
+
+    const order = await storage.createPurchaseOrder({
+      supplierName: input.supplierName,
+      supplierEmail: input.supplierEmail,
+      notes: input.notes,
+      createdBy: userId,
+      items: items,
+    });
+
+    // Notify admins about new purchase order
+    try {
+      await storage.createNotification({
+        userId: userId,
+        message: `New purchase order #${order.id} created for ${input.supplierName}. Total: $${order.totalAmount}`,
+      });
+    } catch (notifErr) {
+      console.error('Failed to create notification:', notifErr);
+    }
+
+    res.status(201).json(order);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ message: err.errors[0].message });
+    }
+    throw err;
+  }
+}));
+
+app.post('/api/purchase-orders/:id/validate', requireAuth, wrapAsync(async (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = await storage.getPurchaseOrder(id);
+  
+  if (!order) {
+    return res.status(404).json({ message: 'Purchase order not found' });
+  }
+
+  const userId = (req.user as any).id;
+  
+  // Update purchase order status
+  const validatedOrder = await storage.updatePurchaseOrder(id, {
+    status: 'validated',
+    validatedBy: userId,
+    validatedAt: new Date(),
+  });
+
+  // Update product stock levels based on purchase order items
+  const items = order.items as any[];
+  for (const item of items) {
+    const product = await storage.getProduct(item.productId);
+    if (product) {
+      // Increase stock by the purchased quantity
+      const newStock = product.stock + item.quantity;
+      await storage.updateProduct(product.id, { 
+        stock: newStock,
+        // Optionally update cost if the new purchase price is different
+        cost: item.unitCost.toString(),
+      });
+    }
+  }
+
+  // Create notification
+  try {
+    await storage.createNotification({
+      userId: order.createdBy,
+      message: `Purchase order #${id} has been validated. Stock has been updated.`,
+    });
+  } catch (notifErr) {
+    console.error('Failed to create notification:', notifErr);
+  }
+
+  res.json(validatedOrder);
+}));
+
+app.post('/api/purchase-orders/:id/send', requireAuth, wrapAsync(async (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = await storage.getPurchaseOrder(id);
+  
+  if (!order) {
+    return res.status(404).json({ message: 'Purchase order not found' });
+  }
+
+  // Update status to sent
+  await storage.updatePurchaseOrder(id, {
+    status: 'sent',
+    sentAt: new Date(),
+  });
+
+  // Here you would integrate with your email service
+  // For now, we'll just return success
+  
+  res.json({ message: `Purchase order #${id} sent successfully` });
+}));
+
+app.post('/api/purchase-orders/:id/complete', requireAuth, wrapAsync(async (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = await storage.getPurchaseOrder(id);
+  
+  if (!order) {
+    return res.status(404).json({ message: 'Purchase order not found' });
+  }
+
+  const completedOrder = await storage.updatePurchaseOrder(id, {
+    status: 'completed',
+    completedAt: new Date(),
+  });
+
+  res.json(completedOrder);
+}));
 
   // DELIVERIES
   app.get(api.deliveries.list.path, requireAuth, wrapAsync(async (req, res) => {

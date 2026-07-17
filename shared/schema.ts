@@ -65,6 +65,36 @@ export const orders = pgTable("orders", {
 
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
 
+
+// === PURCHASE ORDERS ===
+export const purchaseOrders = pgTable("purchase_orders", {
+  id: serial("id").primaryKey(),
+  supplierName: text("supplier_name").notNull(),
+  supplierEmail: text("supplier_email"),
+  status: text("status").notNull().default("draft"),
+  totalAmount: decimal("total_amount").notNull().default("0"),
+  notes: text("notes"),
+  items: jsonb("items").notNull(), 
+  createdBy: integer("created_by").notNull(), 
+  validatedBy: integer("validated_by"),
+  validatedAt: timestamp("validated_at"),
+  sentAt: timestamp("sent_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Insert schemas
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+// Types
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
+
 // === DELIVERIES ===
 export const deliveries = pgTable("deliveries", {
   id: serial("id").primaryKey(),
