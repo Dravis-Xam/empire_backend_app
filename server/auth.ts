@@ -27,8 +27,55 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Helper function to determine the frontend URL dynamically
+function getFrontendUrl(req: any): string {
+  // Priority 1: Check for custom redirect parameter
+  if (req.query.redirect_uri || req.body?.redirect_uri || req.session?.redirectUri) {
+    const redirectUri = req.query.redirect_uri || req.body?.redirect_uri || req.session?.redirectUri;
+    // Clear from session after use
+    if (req.session?.redirectUri) {
+      delete req.session.redirectUri;
+    }
+    return redirectUri;
+  }
 
+  // Priority 2: Check the Referer header
+  const referer = req.headers.referer || req.headers.referrer;
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return `${url.protocol}//${url.host}`;
+    } catch (e) {
+      // Invalid URL, fall through
+    }
+  }
 
+  // Priority 3: Check Origin header
+  const origin = req.headers.origin;
+  if (origin) {
+    return origin;
+  }
+
+  // Priority 4: Use X-Forwarded-Host or Host header to construct URL
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  
+  if (host) {
+    return `${proto}://${host}`;
+  }
+
+  // Priority 5: Fallback to environment variable
+  return process.env.LIVE_FRONTEND_URI || 'http://localhost:3000';
+}
+
+// Middleware to capture redirect URI
+function captureRedirectUri(req: any, res: any, next: any) {
+  // Store the redirect URI in session if provided
+  if (req.query.redirect_uri) {
+    req.session.redirectUri = req.query.redirect_uri;
+  }
+  next();
+}
 
 export function setupAuth(app: Express) {
   // Render always runs behind a proxy and defaults NODE_ENV to production
@@ -46,7 +93,7 @@ export function setupAuth(app: Express) {
     cookie: {
       httpOnly: true,
       secure: isProduction, // Must be true in production!
-      sameSite: "none", 
+      sameSite: "lax", // Changed from "none" to "lax" for better compatibility
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   };
@@ -55,6 +102,8 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Apply the capture redirect middleware
+  app.use(captureRedirectUri);
 
   passport.use(
     new GoogleStrategy(
@@ -62,8 +111,9 @@ export function setupAuth(app: Express) {
         clientID: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
         callbackURL: "/api/auth/google/callback",
+        passReqToCallback: true, // Enable request in callback
       },
-      async (_accessToken, _refreshToken, profile, done) => {
+      async (req: any, _accessToken: string, _refreshToken: string, profile: any, done: any) => {
         try {
           let user = await storage.getUserByGoogleId(profile.id);
 
@@ -110,7 +160,7 @@ export function setupAuth(app: Express) {
         callbackURL: "/api/auth/facebook/callback",
         profileFields: ["id", "displayName", "emails"],
       },
-      async (_accessToken, _refreshToken, profile, done) => {
+      async (_accessToken: string, _refreshToken: string, profile: any, done: any) => {
         try {
           let user = await storage.getUserByFacebookId(profile.id);
 
@@ -147,7 +197,7 @@ export function setupAuth(app: Express) {
   );
 
   passport.use(
-    new LocalStrategy({ passReqToCallback: true }, async (req: any, username, password, done) => {
+    new LocalStrategy({ passReqToCallback: true }, async (req: any, username: string, password: string, done: any) => {
       try {
         const loginIdentifier = String(req.body?.username ?? req.body?.email ?? username ?? "").trim();
         let user = await storage.getUserByUsername(loginIdentifier);
@@ -158,11 +208,6 @@ export function setupAuth(app: Express) {
         if (!user) {
           return done(null, false, { message: "Invalid credentials" });
         }
-
-        // // Accept seeded plain-text users for local demo environments.
-        // if (await comparePasswords(password, user?.password)) {
-        //   return done(null, user);
-        // }
 
         // Support hashed passwords for registered users.
         if (user?.password?.includes(".")) {
@@ -192,8 +237,10 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // Google OAuth routes
   app.get(
     "/api/auth/google",
+    captureRedirectUri, // Capture redirect URI before OAuth
     passport.authenticate("google", {
       scope: ["profile", "email"],
     })
@@ -202,12 +249,12 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", {
-      failureRedirect: `${process.env.LIVE_FRONTEND_URI}/login`,
+      failureRedirect: "/api/auth/failure",
     }),
     (req, res, next) => {
       // Ensure the user structure exists from Passport's processing layer
       if (!req.user) {
-        return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+        return res.redirect(`${getFrontendUrl(req)}/login`);
       }
 
       // Explicitly serialize the authenticated user into the active request session
@@ -227,18 +274,24 @@ export function setupAuth(app: Express) {
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("Session database persistence write error:", saveErr);
-            return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+            return res.redirect(`${getFrontendUrl(req)}/login`);
           }
           
+          // Get the dynamic frontend URL
+          const frontendUrl = getFrontendUrl(req);
+          console.log(`Redirecting to: ${frontendUrl}/?token=${token}`);
+          
           // Complete the sequence safely now that headers and store data match
-          res.redirect(`${process.env.LIVE_FRONTEND_URI}/?token=${token}`);
+          res.redirect(`${frontendUrl}/?token=${token}`);
         });
       });
     }
   );
 
+  // Facebook OAuth routes
   app.get(
     "/api/auth/facebook",
+    captureRedirectUri,
     passport.authenticate("facebook", {
       scope: ["email"],
     })
@@ -247,34 +300,65 @@ export function setupAuth(app: Express) {
   app.get(
     "/api/auth/facebook/callback",
     passport.authenticate("facebook", {
-      failureRedirect: `${process.env.LIVE_FRONTEND_URI}/login`,
+      failureRedirect: "/api/auth/failure",
     }),
     (req, res) => {
+      const frontendUrl = getFrontendUrl(req);
+      
       // Force an explicit save sequence prior to running the redirect
       req.session.save((err) => {
         if (err) {
           console.error("Session save failure during OAuth callback:", err);
-          return res.redirect(`${process.env.LIVE_FRONTEND_URI}/login`);
+          return res.redirect(`${frontendUrl}/login`);
         }
-        res.redirect(`${process.env.LIVE_FRONTEND_URI}/`);
+        
+        const token = jwt.sign(
+          { id: (req.user as any).id },
+          process.env.SESSION_SECRET || "default_secret",
+          { expiresIn: "7d" }
+        );
+        
+        res.redirect(`${frontendUrl}/?token=${token}`);
       });
     }
   );
 
+  // Auth failure handler
+  app.get("/api/auth/failure", (req, res) => {
+    const frontendUrl = getFrontendUrl(req);
+    res.redirect(`${frontendUrl}/login?error=auth_failed`);
+  });
+
+  // Local login
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User, info: any) => {
       if (err) return next(err);
-      if (!user) return res.status(401).json({ message: "Invalid credentials" });
+      if (!user) {
+        // Return the frontend URL in the error response for client-side redirect
+        const frontendUrl = getFrontendUrl(req);
+        return res.status(401).json({ 
+          message: "Invalid credentials",
+          redirectUri: `${frontendUrl}/login`
+        });
+      }
+      
       req.login(user, (err) => {
         if (err) return next(err);
         req.session.save((saveErr: any) => {
           if (saveErr) return next(saveErr);
-          res.status(200).json(user);
+          
+          // Include the frontend URL in the response
+          const frontendUrl = getFrontendUrl(req);
+          res.status(200).json({ 
+            user,
+            redirectUri: frontendUrl 
+          });
         });
       });
     })(req, res, next);
   });
 
+  // Register
   app.post("/api/register", async (req, res, next) => {
     try {
       const normalizedBody = {
@@ -305,7 +389,12 @@ export function setupAuth(app: Express) {
         message: `Welcome ${created.name} to Empire Hub Phones. We are glad to have you. Feel free to explore our catalogue. For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
       })
 
-      return res.status(201).json(created);
+      // Include the frontend URL in the response
+      const frontendUrl = getFrontendUrl(req);
+      return res.status(201).json({ 
+        user: created,
+        redirectUri: frontendUrl 
+      });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid input" });
@@ -314,6 +403,7 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // Update user
   app.post("/api/update-user", async(req, res, next) => {
     try {
       const normalizedBody = {
@@ -335,7 +425,6 @@ export function setupAuth(app: Express) {
       })
 
       return res.status(200).json(updated);
-
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid input" });
@@ -344,6 +433,7 @@ export function setupAuth(app: Express) {
     }
   })
 
+  // Logout
   app.post("/api/logout", (req, res, next) => {
     req.logout((err) => {
       if (err) return next(err);
@@ -351,10 +441,12 @@ export function setupAuth(app: Express) {
     });
   });
 
+  // Get current user with dynamic URL support
   app.get("/api/user", async (req, res) => {
-  // 1. Compatibility check: if a cookie session happened to get through, use it
+    // 1. Compatibility check: if a cookie session happened to get through, use it
     if (req.isAuthenticated()) {
-      return res.json(req.user);
+      const frontendUrl = getFrontendUrl(req);
+      return res.json({ ...req.user, frontendUrl });
     }
 
     // 2. Cross-domain check: look for your bearer authorization header token
@@ -374,7 +466,8 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: "User account no longer exists" });
       }
 
-      return res.json(user);
+      const frontendUrl = getFrontendUrl(req);
+      return res.json({ ...user, frontendUrl });
     } catch (err) {
       return res.status(401).json({ message: "Session expired or invalid" });
     }
