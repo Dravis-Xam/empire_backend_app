@@ -108,6 +108,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }));
 
 
+ app.post(api.products.deleteBulkId.path, requireAuth, wrapAsync(async (req, res) => {
+  const ids = req.body.ids;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(404).json({ message: "No product ids provided" });
+  }
+  const deleted = await storage.deleteBulkProductsById(ids);
+  if (deleted.length === 0) {
+    return res.status(404).json({ message: "No matching products found" });
+  }
+  res.status(204).send();
+}));
+
 
   // ORDERS
   app.get(api.orders.list.path, requireAuth, wrapAsync(async (req, res) => {
