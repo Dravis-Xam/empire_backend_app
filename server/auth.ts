@@ -98,9 +98,9 @@ export function setupAuth(app: Express) {
     },
   };
 
-  app.use(session(sessionSettings));
-  app.use(passport.initialize());
-  app.use(passport.session());
+    // remove the global app.use(session...) / passport.initialize() / passport.session()
+  const sessionMw = session(sessionSettings);
+  app.use('/api/auth', sessionMw, passport.initialize(), passport.session());
 
   // Apply the capture redirect middleware
   app.use(captureRedirectUri);
@@ -231,7 +231,7 @@ export function setupAuth(app: Express) {
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
-      done(null, user);
+      done(null, user ?? false);
     } catch (err) {
       done(err);
     }

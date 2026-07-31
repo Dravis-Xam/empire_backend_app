@@ -417,6 +417,17 @@ app.post('/api/purchase-orders/:id/complete', requireAuth, wrapAsync(async (req,
     }
   }));
 
+  // after all routes are registered
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err?.message === 'Failed to deserialize user out of session') {
+      req.session?.destroy(() => {});
+      res.clearCookie('connect.sid');
+      return res.status(401).json({ message: 'Session expired, please log in again' });
+    }
+    console.error(err);
+    return res.status(500).json({ message: 'Internal server error' });
+  });
+
   return httpServer;
 }
 
