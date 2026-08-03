@@ -70,7 +70,24 @@ export const api = {
         200: z.custom<typeof products.$inferSelect>(),  // was z.array(...)
         404: errorSchemas.notFound,
       },
-    }, 
+    },
+    getProductsUsingBarcodes: {
+      method: 'POST' as const,
+      path: '/api/products/barcodes',
+      responses: {
+        200: z.array(z.custom<typeof products.$inferSelect>()),
+        404: errorSchemas.notFound
+      }
+    },
+    createUsingMultipleBarcodes: {
+      method: 'POST' as const,
+      path: '/api/products/createwithbarcodes',
+      input: z.array(insertProductSchema),
+      responses: {
+        201: z.array(z.custom<typeof products.$inferSelect>()),
+        404: errorSchemas.notFound
+      }
+    },
     createUsingBarcode: {
       method: 'POST' as const,
       path: '/api/products/barcode/create-item',

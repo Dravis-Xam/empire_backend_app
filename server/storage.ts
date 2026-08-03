@@ -1,4 +1,4 @@
-import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser, type PurchaseOrder, type InsertPurchaseOrder, purchaseOrders } from "@shared/schema";
+import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser, type PurchaseOrder, type InsertPurchaseOrder, purchaseOrders} from "@shared/schema";
 import { db } from "./db";
 import { eq, inArray } from "drizzle-orm";
 import session from "express-session";
@@ -27,6 +27,8 @@ export interface IStorage {
   getProducts(): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   getProductByBarcode(barCode: string):  Promise<Product | undefined>;
+  getProductsUsingBarcodes(barcodes: string[]): Promise<Product [] | undefined>;
+  createProductsByBarcodes(insertProductsWithBarcodes: InsertProduct [] | undefined): Promise<Product [] | undefined>;
   createProductByBarcode(product: InsertProduct): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   createBulkProducts(product: InsertProduct[]): Promise<Product []>
@@ -166,6 +168,26 @@ export class DatabaseStorage implements IStorage {
     const [product] = await db.select().from(products).where(eq(products.barcode, barcode));
     return product;
   }
+
+  async getProductsUsingBarcodes(barcodes: string[]): Promise<Product[] | undefined> {
+    const results = await db.select().from(products).where(inArray(products.barcode, barcodes));
+    return results
+  }
+
+  async createProductsByBarcodes(insertProductsWithBarcodes: InsertProduct[]): Promise<Product[] | undefined> {
+      if (!insertProductsWithBarcodes || insertProductsWithBarcodes.length === 0) {
+          return [];
+      }
+
+      const results = await db
+          .insert(products)
+          .values(insertProductsWithBarcodes)
+          .onConflictDoNothing({target: products.barcode})
+          .returning();
+
+      return results;
+  }
+
 
   async createProductByBarcode(insertProduct: InsertProduct): Promise<Product | undefined> {
     const [product] = await db.insert(products).values(insertProduct).returning();

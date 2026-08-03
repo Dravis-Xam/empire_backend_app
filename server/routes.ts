@@ -44,11 +44,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(product);
   }));
 
+  app.post(api.products.getProductsUsingBarcodes.path, wrapAsync(async (req, res) => {
+    const request = JSON.parse(req.body);
+    const barcodes = Array.isArray(request) ? request : [request]
+    const products = await storage.getProductsUsingBarcodes(barcodes)
+    if (!products) {
+      return res.status(404).json({message: 'Product not found'})
+    }
+    return res.json(products)
+  }))
+
   app.post(api.products.createUsingBarcode.path, wrapAsync(async (req, res) => {
     const input = api.products.create.input.parse(req.body);
     console.log(input);
     const product = await storage.createProductByBarcode(input);
     res.status(201).json(product);
+  }))
+
+  app.post(api.products.createUsingMultipleBarcodes.path, requireAuth, wrapAsync(async (req, res) => {
+    const input = api.products.createUsingMultipleBarcodes.input.parse(req.body);
+    console.log(input);
+    const products = await storage.createProductsByBarcodes(input);
+    res.status(201).json(products);
   }))
 
   app.post(api.products.create.path, requireAuth, wrapAsync(async (req, res) => {
