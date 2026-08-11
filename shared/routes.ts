@@ -144,7 +144,8 @@ export const api = {
     deleteBulk: {
       method: "POST" as const,
       path: '/api/products/delete/barcode',
-      response: {
+      input: z.array(z.string()), 
+        response: {
         204: z.void(),
         404: errorSchemas.notFound,
       }
@@ -152,8 +153,9 @@ export const api = {
     deleteBulkId: {
       method: "POST" as const,
       path: "/api/products/delete/id",
+      input: z.array(z.number().int()), 
       responses: {
-          204: z.void(),
+        204: z.void(),
         404: errorSchemas.notFound,
       }
 

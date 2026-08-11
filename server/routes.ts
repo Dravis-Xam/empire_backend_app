@@ -44,28 +44,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(product);
   }));
 
-  app.post(api.products.getProductsUsingBarcodes.path, wrapAsync(async (req, res) => {
-    const request = JSON.parse(req.body);
-    const barcodes = Array.isArray(request) ? request : [request]
-    const products = await storage.getProductsUsingBarcodes(barcodes)
-    if (!products) {
-      return res.status(404).json({message: 'Product not found'})
+  app.post('/api/products/barcode/bulk-fetch', wrapAsync(async (req, res) => {
+    const barcodes: string[] = Array.isArray(req.body?.barcodes)
+      ? req.body.barcodes.map((b: unknown) => String(b))
+      : [];
+  
+    if (barcodes.length === 0) {
+      return res.status(400).json({ message: 'barcodes array is required' });
     }
-    return res.json(products)
-  }))
+  
+    const found = (await storage.getProductsUsingBarcodes(barcodes)) || [];
+    const foundBarcodes = new Set(found.map((p) => p.barcode));
+    const missing = barcodes.filter((b) => !foundBarcodes.has(b));
+  
+    res.json({ found, missing });
+  }));
+  
+  
+  app.post('/api/products/barcode/bulk-create', requireAuth, wrapAsync(async (req, res) => {
+    const items = Array.isArray(req.body?.products) ? req.body.products : [];
+  
+    if (items.length === 0) {
+      return res.status(400).json({ message: 'products array is required' });
+    }
+  
+    try {
+      const parsed = items.map((item: any) => api.products.create.input.parse(item));
+      const created = await storage.createProductsByBarcodes(parsed);
+      res.status(201).json(created);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      throw err;
+    }
+  }));
+
 
   app.post(api.products.createUsingBarcode.path, wrapAsync(async (req, res) => {
     const input = api.products.create.input.parse(req.body);
     console.log(input);
     const product = await storage.createProductByBarcode(input);
     res.status(201).json(product);
-  }))
-
-  app.post(api.products.createUsingMultipleBarcodes.path, requireAuth, wrapAsync(async (req, res) => {
-    const input = api.products.createUsingMultipleBarcodes.input.parse(req.body);
-    console.log(input);
-    const products = await storage.createProductsByBarcodes(input);
-    res.status(201).json(products);
   }))
 
   app.post(api.products.create.path, requireAuth, wrapAsync(async (req, res) => {
