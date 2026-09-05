@@ -1,16 +1,17 @@
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
+import { api } from "@shared/routes";
+import { User } from "@shared/schema";
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
 import { type Express } from "express";
 import session from "express-session";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
-import { storage } from "./storage";
-import { User } from "@shared/schema";
-import { api } from "@shared/routes";
-import { z } from "zod";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import jwt from 'jsonwebtoken';
+import passport from "passport";
 import { Strategy as FacebookStrategy } from "passport-facebook";
-import jwt from 'jsonwebtoken'
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { Strategy as LocalStrategy } from "passport-local";
+import { promisify } from "util";
+import { z } from "zod";
+import { captureRedirectUri, getFrontendUrl } from "./auth-utils";
+import { storage } from "./storage";
 
 const scryptAsync = promisify(scrypt);
 
@@ -25,56 +26,6 @@ async function comparePasswords(supplied: string, stored: string) {
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
-}
-
-// Helper function to determine the frontend URL dynamically
-function getFrontendUrl(req: any): string {
-  // Priority 1: Check for custom redirect parameter
-  if (req.query.redirect_uri || req.body?.redirect_uri || req.session?.redirectUri) {
-    const redirectUri = req.query.redirect_uri || req.body?.redirect_uri || req.session?.redirectUri;
-    // Clear from session after use
-    if (req.session?.redirectUri) {
-      delete req.session.redirectUri;
-    }
-    return redirectUri;
-  }
-
-  // Priority 2: Check the Referer header
-  const referer = req.headers.referer || req.headers.referrer;
-  if (referer) {
-    try {
-      const url = new URL(referer);
-      return `${url.protocol}//${url.host}`;
-    } catch (e) {
-      // Invalid URL, fall through
-    }
-  }
-
-  // Priority 3: Check Origin header
-  const origin = req.headers.origin;
-  if (origin) {
-    return origin;
-  }
-
-  // Priority 4: Use X-Forwarded-Host or Host header to construct URL
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
-  
-  if (host) {
-    return `${proto}://${host}`;
-  }
-
-  // Priority 5: Fallback to environment variable
-  return process.env.LIVE_FRONTEND_URI || 'http://localhost:3000';
-}
-
-// Middleware to capture redirect URI
-function captureRedirectUri(req: any, res: any, next: any) {
-  // Store the redirect URI in session if provided
-  if (req.query.redirect_uri) {
-    req.session.redirectUri = req.query.redirect_uri;
-  }
-  next();
 }
 
 export function setupAuth(app: Express) {

@@ -1,12 +1,12 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
-import { storage } from "./storage";
 import { api } from "@shared/routes";
+import { ROLES } from "@shared/schema";
+import type { Express } from "express";
+import { type Server } from "http";
 import { z } from "zod";
-import { ROLES, type InsertUser } from "@shared/schema";
-import { getPaymentCallbackOrderId, getPaymentCallbackStatus, isValidKopoKopoCallback, pay, send_invoice_email } from "./pay";
+import { setupAuth } from "./auth";
 import { wrapAsync } from "./error";
+import { getPaymentCallbackOrderId, getPaymentCallbackStatus, isValidKopoKopoCallback, pay, send_invoice_email } from "./pay";
+import { storage } from "./storage";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Set up authentication (passport)
@@ -144,13 +144,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   }));
 
+  app.post(api.products.deleteBulk.path, requireAuth, wrapAsync(async (req, res) => {
+    const input = api.products.deleteBulk.input.parse(req.body);
+    const deleted = await storage.deleteBulkProductsByBarcode(input.barcodes);
+    if (deleted.length === 0) {
+      return res.status(404).json({ message: "No matching products found" });
+    }
+    res.status(204).send();
+  }));
 
  app.post(api.products.deleteBulkId.path, requireAuth, wrapAsync(async (req, res) => {
-  const ids = req.body.ids;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(404).json({ message: "No product ids provided" });
-  }
-  const deleted = await storage.deleteBulkProductsById(ids);
+  const input = api.products.deleteBulkId.input.parse(req.body);
+  const deleted = await storage.deleteBulkProductsById(input.ids);
   if (deleted.length === 0) {
     return res.status(404).json({ message: "No matching products found" });
   }

@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { insertUserSchema, insertProductSchema, insertOrderSchema, insertDeliverySchema, insertSaleSchema, users, products, orders, deliveries, notifications, insertPaymentSchema, purchaseOrders } from './schema';
-import type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification } from './schema';
-import { response } from 'express';
+import type { InsertDelivery, InsertNotification, InsertOrder, InsertProduct, InsertUser } from './schema';
+import { deliveries, insertDeliverySchema, insertOrderSchema, insertPaymentSchema, insertProductSchema, insertSaleSchema, insertUserSchema, notifications, orders, products, purchaseOrders, users } from './schema';
 
-export type { InsertUser, InsertProduct, InsertOrder, InsertDelivery, InsertNotification };
+export type { InsertDelivery, InsertNotification, InsertOrder, InsertProduct, InsertUser };
 
 
 export const errorSchemas = {
@@ -144,8 +143,8 @@ export const api = {
     deleteBulk: {
       method: "POST" as const,
       path: '/api/products/delete/barcode',
-      input: z.array(z.string()), 
-        response: {
+      input: z.object({ barcodes: z.array(z.string()).min(1) }),
+      responses: {
         204: z.void(),
         404: errorSchemas.notFound,
       }
@@ -153,7 +152,7 @@ export const api = {
     deleteBulkId: {
       method: "POST" as const,
       path: "/api/products/delete/id",
-      input: z.array(z.number().int()), 
+      input: z.object({ ids: z.array(z.number().int()).min(1) }),
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,

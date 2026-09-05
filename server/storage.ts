@@ -1,9 +1,9 @@
-import { users, products, orders, deliveries, notifications, payments, type User, type Role, type InsertUser, type Product, type InsertProduct, type Order, type InsertOrder, type Delivery, type InsertDelivery, type Notification, type InsertNotification, type Payment, type InsertPayment, UpdateUser, type PurchaseOrder, type InsertPurchaseOrder, purchaseOrders} from "@shared/schema";
-import { db } from "./db";
+import { deliveries, type Delivery, type InsertDelivery, type InsertNotification, type InsertOrder, type InsertPayment, type InsertProduct, type InsertPurchaseOrder, type InsertUser, type Notification, notifications, type Order, orders, type Payment, payments, type Product, products, type PurchaseOrder, purchaseOrders, type Role, UpdateUser, type User, users } from "@shared/schema";
+import connectPgSimple from "connect-pg-simple";
 import { eq, inArray } from "drizzle-orm";
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
+import { db } from "./db";
 
 export interface IStorage {
   // Users & Auth
@@ -302,7 +302,7 @@ async deleteBulkProductsById(ids: number[]): Promise<Product[]> {
   async updatePurchaseOrder(id: number, updates: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder> {
     const [order] = await db.update(purchaseOrders)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(orders.id, id))
+      .where(eq(purchaseOrders.id, id))
       .returning();
     return order;
   }
