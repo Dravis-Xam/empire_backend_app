@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { ROLES, type InsertUser } from "@shared/schema";
-import { pay, send_invoice_email } from "./pay";
+import { getPaymentCallbackOrderId, getPaymentCallbackStatus, isValidKopoKopoCallback, pay, send_invoice_email } from "./pay";
 import { wrapAsync } from "./error";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -410,44 +410,52 @@ app.post('/api/purchase-orders/:id/complete', requireAuth, wrapAsync(async (req,
   app.post(api.callbacks.mpesa.path, wrapAsync(async (req, res) => {
     try {
       const body = req.body || {};
-      try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Received M-Pesa callback', { body: body }); } catch {}
+      const signature = req.get('X-kopokopo-signature');
+      if (!isValidKopoKopoCallback(body, signature, (req as any).rawBody)) {
+        return res.status(401).json({ message: 'Invalid Kopo Kopo callback signature' });
+      }
+      try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Received Kopo Kopo callback', { body: body }); } catch {}
 
-      // Try to determine orderId from common fields
-      const orderId = Number(body.orderId || body.order_id || body?.data?.orderId || body?.data?.order_id);
+      const orderId = getPaymentCallbackOrderId(body);
 
-      if (!Number.isNaN(orderId) && orderId > 0) {
+      if (orderId) {
         const payments = await storage.getPaymentsForOrder(orderId);
         if (payments && payments.length > 0) {
           const payment = payments[0];
+          const status = getPaymentCallbackStatus(body);
 
-          // Here we assume the callback represents a successful payment; in real integrations,
-          // inspect the provider-specific payload to determine success/failure.
-          await storage.updatePayment(payment.id, { status: 'completed', providerResponse: body as any });
-          try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Payment marked completed', { paymentId: payment.id, orderId }); } catch {}
+          await storage.updatePayment(payment.id, { status, providerResponse: body as any });
+          try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Payment status updated', { paymentId: payment.id, orderId, status }); } catch {}
 
-          // Update order status to processing
-          await storage.updateOrderStatus(orderId, 'processing');
+          if (status === 'completed') {
+            await storage.updateOrderStatus(orderId, 'processing');
 
-          // Create delivery if none exists for the order
-          const existingDelivery = await storage.getDeliveryByOrder(orderId);
-          if (!existingDelivery) {
-            const newDelivery = await storage.createDelivery({
-              orderId: orderId,
-              status: 'pending',
-              trackingInfo: `TRK-${Date.now()}`
+            const existingDelivery = await storage.getDeliveryByOrder(orderId);
+            if (!existingDelivery) {
+              const newDelivery = await storage.createDelivery({
+                orderId,
+                status: 'pending',
+                trackingInfo: `TRK-${Date.now()}`
+              });
+              try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Delivery created from callback', { deliveryId: newDelivery.id, orderId }); } catch {}
+            }
+
+            if (payment.status !== 'completed') {
+              await storage.createNotification({
+                userId: payment.userId,
+                message: `Payment received for order #${orderId}. Your order is being processed.`
+              });
+            }
+          } else if (status === 'failed') {
+            await storage.createNotification({
+              userId: payment.userId,
+              message: `Payment for order #${orderId} failed. Please try again.`
             });
-            try { const { addBreadcrumb } = await import('./error'); addBreadcrumb('Delivery created from callback', { deliveryId: newDelivery.id, orderId }); } catch {}
           }
-
-          // Notify user
-          await storage.createNotification({
-            userId: payment.userId,
-            message: `Payment received for order #${orderId}. Your order is being processed.`
-          });
         }
       }
 
-      return res.status(200).json({ message: 'M-Pesa callback processed' });
+      return res.status(200).json({ message: 'Kopo Kopo callback processed' });
     } catch (err) {
       console.error('Callback processing failed:', err);
       return res.status(500).json({ message: 'Callback processing failed' });

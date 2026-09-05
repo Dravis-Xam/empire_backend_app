@@ -87,6 +87,26 @@ This is a high-performance backend for an e-commerce platform dealing with phone
 - **Body**: `{ status: "processing" | "shipped" | "delivered" | "cancelled" }`
 - **Response**: `200 OK`
 
+## Kopo Kopo Payments
+
+### Start Payment
+Payments are initiated while creating an order:
+`POST /api/orders` (Requires Auth)
+
+- **Body fields**: include `amount` and `phone` alongside the order fields.
+- **Phone formats**: `07XXXXXXXX`, `2547XXXXXXXX`, or `+2547XXXXXXXX`.
+- **Response**: `201 Created` with `{ order, payment }`.
+- **Payment response**: includes `success`, `message`, and `checkoutUrl`.
+
+The payment uses Kopo Kopo's `M-PESA STK Push` channel and stores the order ID in provider metadata.
+
+### Payment Callback
+`POST /api/callbacks/mpesa`
+
+Kopo Kopo calls this endpoint after payment processing. The endpoint accepts nested Kopo Kopo callback payloads, updates the matching payment, and only creates a delivery for a confirmed successful payment.
+
+When `K2_VERIFY_CALLBACK_SIGNATURE=true`, the request must include the `X-kopokopo-signature` HMAC-SHA256 header generated with `K2_API_KEY`.
+
 ---
 
 ## Delivery Endpoints

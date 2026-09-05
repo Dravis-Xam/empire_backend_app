@@ -2,6 +2,8 @@
 import { storage } from './storage';
 import nodemailer from 'nodemailer';
 import { TokenService, StkService } from './k2-connect';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getCachedValue, setCachedValue, withRedisLock } from './redis';
 
 /* ===================== TYPES ===================== */
 
@@ -9,7 +11,11 @@ export interface StkPushPayload {
   userid: number,
   amount: number;
   phone: string;
+  orderId?: number;
 }
+
+let cachedToken: { value: string; expiresAt: number } | undefined;
+let tokenRequest: Promise<KopoKopoTokenResponse> | undefined;
 
 export interface KopoKopoTokenResponse {
   access_token: string,
@@ -26,14 +32,56 @@ export interface StkPushResponse {
 
 /* ===================== AUTH ===================== */
 
+/** Return a cached or freshly issued Kopo Kopo OAuth token. */
 export const getKopoKopoToken = async(): Promise<KopoKopoTokenResponse> => {
-  return TokenService
-        .getToken()
-        .then((response: any) => response.data as KopoKopoTokenResponse)
-        .catch((error: any) => {
-            console.log(error);
-            throw new Error('Failed to get KopoKopo token');
-        })
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+    return {
+      access_token: cachedToken.value,
+      token_type: 'Bearer',
+      expires_in: Math.floor((cachedToken.expiresAt - Date.now()) / 1000),
+      created_at: new Date(cachedToken.expiresAt - 300_000).toISOString(),
+    };
+  }
+
+  if (!tokenRequest) {
+    tokenRequest = withRedisLock('kopokopo:oauth:lock', async () => {
+      const sharedToken = await getCachedValue<KopoKopoTokenResponse>('kopokopo:oauth:token');
+      if (sharedToken?.access_token) {
+        cachedToken = {
+          value: sharedToken.access_token,
+          expiresAt: Date.now() + sharedToken.expires_in * 1000,
+        };
+        return sharedToken;
+      }
+
+      try {
+        const response: any = await TokenService.getToken();
+        const payload = response?.data ?? response;
+        const token = typeof payload === 'string' ? payload : payload?.access_token;
+        if (!token) throw new Error('Kopo Kopo did not return an access token');
+
+        const expiresIn = Number(payload?.expires_in ?? 300);
+        const tokenResponse = {
+          access_token: token,
+          token_type: payload?.token_type ?? 'Bearer',
+          expires_in: expiresIn,
+          created_at: payload?.created_at ?? new Date().toISOString(),
+        };
+        cachedToken = { value: token, expiresAt: Date.now() + expiresIn * 1000 };
+        await setCachedValue('kopokopo:oauth:token', tokenResponse, expiresIn - 30);
+        return tokenResponse;
+      } catch (error) {
+        console.error('Failed to get Kopo Kopo token:', error);
+        throw new Error('Failed to get Kopo Kopo token');
+      }
+    });
+  }
+
+  try {
+    return await tokenRequest;
+  } finally {
+    tokenRequest = undefined;
+  }
 }
 
 // export const getMpesaAccessToken = async (): Promise<string> => {
@@ -63,53 +111,81 @@ export const getKopoKopoToken = async(): Promise<KopoKopoTokenResponse> => {
 
 /* ===================== STK PUSH ===================== */
 
+/** Initiate an incoming Kopo Kopo M-Pesa STK Push for an order. */
 export const initiateStkPush = async (
   payload: StkPushPayload
 ): Promise<StkPushResponse> => {
-  const accessToken = await getKopoKopoToken();
-  const startTime = new Date(accessToken?.created_at);
-  const timeout = new Date(accessToken?.expires_in);
-  const currentTime = new Date();
-
-  while (currentTime.getTime() > timeout.getTime()) {
-    console.log('Access token expired, fetching new token...');
-    const newTokenResponse = await getKopoKopoToken();
-    accessToken.access_token = newTokenResponse.access_token;
-    accessToken.created_at = newTokenResponse.created_at;
-    accessToken.expires_in = newTokenResponse.expires_in;
-
-    // Update times
-    startTime.setTime(Date.parse(accessToken.created_at));
-    timeout.setTime(startTime.getTime() + accessToken.expires_in * 1000);
-
-    await storage.createNotification({
-      userId: payload.userid,
-      message: `Your previous payment token expired. Try a little faster this time 😉`
-    });
+  if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+    throw new Error('Amount must be a positive number');
   }
 
-  const user = await storage.getUser(payload.userid)
+  const phone = normalizePhone(payload.phone);
+  const accessToken = await getKopoKopoToken();
 
-  // 2. Trigger M-Pesa STK Push
-  const locationUrl = await StkService.initiateStkPush({
-    paymentChannel: 'M-PESA',
+  const user = await storage.getUser(payload.userid);
+
+  const locationUrl = await StkService.initiateIncomingPayment({
+    paymentChannel: 'M-PESA STK Push',
     tillNumber: process.env.K2_TILL_NUMBER || '',
     firstName: user?.name?.split(" ")[0] || 'Customer',
-    lastName: user?.name?.split(" ")[1] || 'User',
-    phoneNumber: payload.phone, // E.g., +254700000000
+    lastName: user?.name?.split(" ").slice(1).join(' ') || 'User',
+    phoneNumber: phone,
     amount: payload.amount,
     email: user?.email || 'customer@example.com',
+    currency: 'KES',
+    metadata: { orderId: payload.orderId },
     callbackUrl: process.env.K2_CALLBACK_URL || '',
     accessToken: accessToken
   });
 
-  // K2 returns a Location header URL to track request status
+  if (typeof locationUrl !== 'string' || !locationUrl) {
+    throw new Error('Kopo Kopo did not return a payment location');
+  }
+
   return Promise.resolve({
     success: true,
     message: 'Payment initiation successful',
     checkoutUrl: locationUrl
   });
 };
+
+/** Normalize supported Kenyan M-Pesa phone formats to the 254XXXXXXXXX format. */
+function normalizePhone(phone: string): string {
+  const compact = phone.replace(/[\s-]/g, '');
+  if (/^07\d{8}$/.test(compact)) return `254${compact.slice(1)}`;
+  if (/^\+2547\d{8}$/.test(compact)) return compact.slice(1);
+  if (/^2547\d{8}$/.test(compact)) return compact;
+  throw new Error('Phone must be a valid Kenyan M-Pesa number');
+}
+
+/** Convert a Kopo Kopo callback status to the application's payment status. */
+export function getPaymentCallbackStatus(body: any): 'completed' | 'failed' | 'initiated' {
+  const status = String(
+    body?.data?.attributes?.status ?? body?.event?.resource?.status ?? body?.status ?? ''
+  ).toLowerCase();
+  if (['success', 'successful', 'completed', 'complete'].includes(status)) return 'completed';
+  if (['failed', 'failure', 'cancelled', 'canceled'].includes(status)) return 'failed';
+  return 'initiated';
+}
+
+/** Extract the order ID stored in Kopo Kopo callback metadata. */
+export function getPaymentCallbackOrderId(body: any): number | undefined {
+  const metadata = body?.data?.attributes?.metadata ?? body?.metadata ?? {};
+  const value = metadata.orderId ?? metadata.order_id ?? body?.orderId ?? body?.order_id;
+  const orderId = Number(value);
+  return Number.isInteger(orderId) && orderId > 0 ? orderId : undefined;
+}
+
+/** Validate a Kopo Kopo callback signature when signature verification is enabled. */
+export function isValidKopoKopoCallback(body: unknown, signature: string | undefined, rawBody?: Buffer): boolean {
+  if (process.env.K2_VERIFY_CALLBACK_SIGNATURE !== 'true') return true;
+  if (!signature || !process.env.K2_API_KEY) return false;
+  const content = rawBody ?? Buffer.from(JSON.stringify(body));
+  const expected = createHmac('sha256', process.env.K2_API_KEY).update(content).digest('hex');
+  const provided = Buffer.from(signature, 'hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  return provided.length === expectedBuffer.length && timingSafeEqual(provided, expectedBuffer);
+}
 
 // export const initiateStkPush = async (
 //   payload: StkPushPayload
@@ -166,11 +242,12 @@ export const initiateStkPush = async (
 //   return (await response.json()) as StkPushResponse;
 // };
 
+/** Start payment, persist its initiation result, and notify the customer. */
 export const pay = async (data: any) => {
   try {
     const { amount, phone, userid, orderId } = data;
 
-        const stkResponse = await initiateStkPush({ userid, amount, phone });
+        const stkResponse = await initiateStkPush({ userid, amount, phone, orderId });
         try {
           const { addBreadcrumb } = await import('./error');
           addBreadcrumb('Initiated STK push', { userid, amount, phone });
@@ -232,6 +309,7 @@ export const pay = async (data: any) => {
 
 
 
+/** Send an order invoice when the customer has an email address. */
 export async function send_invoice_email(order: { id: number; createdAt: Date | null; status: string; userId: number; total: string; items: unknown; }) {
   try {
     const user = await storage.getUser(order.userId);

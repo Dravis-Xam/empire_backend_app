@@ -16,6 +16,41 @@
         "created_at": "2026-04-27T00:09:15+03:00"
     }
 ```
+
+## Empire application integration
+
+The application-specific implementation is in `server/pay.ts` and `server/redis.ts`.
+
+### Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `K2_CLIENT_ID` | Yes | Kopo Kopo application client ID |
+| `K2_CLIENT_SECRET` | Yes | Kopo Kopo application secret |
+| `K2_API_KEY` | Yes for signature validation | Kopo Kopo API key and callback HMAC key |
+| `K2_BASE_URL` | No | Kopo Kopo API base URL; defaults to `https://kopokopo.com` |
+| `K2_TILL_NUMBER` | Yes | Till receiving the M-Pesa payment |
+| `K2_CALLBACK_URL` | Yes | Public callback URL, normally `/api/callbacks/mpesa` |
+| `K2_VERIFY_CALLBACK_SIGNATURE` | No | Set to `true` to require callback signatures |
+| `REDIS_URL` | No | Redis connection URL for shared token caching and locking |
+
+### Application functions
+
+- `getKopoKopoToken()`: returns a valid OAuth token, using the local cache first, then Redis, then Kopo Kopo. Concurrent requests are coalesced in-process and coordinated across instances with a Redis lock.
+- `initiateStkPush(payload)`: validates the amount and Kenyan phone number, loads the customer, and starts an incoming `M-PESA STK Push` with the order ID in metadata.
+- `getPaymentCallbackStatus(body)`: maps Kopo Kopo callback statuses to `completed`, `failed`, or `initiated`.
+- `getPaymentCallbackOrderId(body)`: extracts the order ID from callback metadata.
+- `isValidKopoKopoCallback(body, signature, rawBody)`: validates the callback HMAC when signature validation is enabled.
+- `pay(data)`: orchestrates STK initiation, payment persistence, and customer notifications.
+- `send_invoice_email(order)`: sends an invoice email for an order when the customer has an email address.
+
+### Redis functions
+
+- `getCachedValue(key)`: reads and parses a JSON value from Redis.
+- `setCachedValue(key, value, ttlSeconds)`: stores a JSON value with a TTL.
+- `withRedisLock(key, work)`: acquires a short-lived distributed lock, runs the callback, and releases the lock safely using the lock value.
+
+Redis is optional. If `REDIS_URL` is not configured or the initial connection fails, the payment service continues with its in-process token cache and concurrency control.
 ```javascript
     const options = {
         clientId: 'YOUR_CLIENT_ID',
