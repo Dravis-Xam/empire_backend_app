@@ -73,7 +73,7 @@ app.use(cors({
     }
   },
   credentials: true, // Essential for session cookies over subdomains
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
 }));
 

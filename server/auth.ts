@@ -51,7 +51,7 @@ export function setupAuth(app: Express) {
 
     // remove the global app.use(session...) / passport.initialize() / passport.session()
   const sessionMw = session(sessionSettings);
-  app.use('/api/auth', sessionMw, passport.initialize(), passport.session());
+  app.use('/api', sessionMw, passport.initialize(), passport.session());
 
   // Apply the capture redirect middleware
   app.use(captureRedirectUri);
@@ -300,9 +300,10 @@ export function setupAuth(app: Express) {
           
           // Include the frontend URL in the response
           const frontendUrl = getFrontendUrl(req);
-          res.status(200).json({ 
-            user,
-            redirectUri: frontendUrl 
+          res.status(200).json({
+            user: toPublicUser(user),
+            token: issueToken(user.id),
+            redirectUri: frontendUrl,
           });
         });
       });
@@ -342,9 +343,13 @@ export function setupAuth(app: Express) {
 
       // Include the frontend URL in the response
       const frontendUrl = getFrontendUrl(req);
-      return res.status(201).json({ 
-        user: created,
-        redirectUri: frontendUrl 
+      req.login(created, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        return res.status(201).json({
+          user: toPublicUser(created),
+          token: issueToken(created.id),
+          redirectUri: frontendUrl,
+        });
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -355,27 +360,21 @@ export function setupAuth(app: Express) {
   });
 
   // Update user
-  app.post("/api/update-user", async(req, res, next) => {
+  app.post("/api/update-user", authenticateRequest, async(req, res, next) => {
     try {
-      const normalizedBody = {
-        ...req.body,
-        username: req.body?.username ?? req.body?.email,
-      };
-
-      const input = api.auth.register.input.parse(normalizedBody);
-      const existing = await storage.getUserByUsername(input.username);
-      if (!existing) {
-        return res.status(400).json({ message: "Username does not exist", field: "username" });
-      }
-
-      const updated = await storage.updateUser(normalizedBody?.id, normalizedBody);
+      const input = z.object({
+        name: z.string().trim().min(1).optional(),
+        email: z.string().email().optional(),
+        username: z.string().trim().min(1).optional(),
+      }).strict().parse(req.body);
+      const updated = await storage.updateUser((req.user as User).id, input);
 
       storage.createNotification({
         userId: updated.id,
         message: `Hey ${updated.name}. Your credentials have been updated. For any inquiries or complaints, call us or sms to <a href="0711489056">0711489056</a>`        
       })
 
-      return res.status(200).json(updated);
+      return res.status(200).json(toPublicUser(updated));
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid input" });
@@ -397,7 +396,7 @@ export function setupAuth(app: Express) {
     // 1. Compatibility check: if a cookie session happened to get through, use it
     if (req.isAuthenticated()) {
       const frontendUrl = getFrontendUrl(req);
-      return res.json({ ...req.user, frontendUrl });
+      return res.json({ ...toPublicUser(req.user as User), frontendUrl });
     }
 
     // 2. Cross-domain check: look for your bearer authorization header token
@@ -418,9 +417,38 @@ export function setupAuth(app: Express) {
       }
 
       const frontendUrl = getFrontendUrl(req);
-      return res.json({ ...user, frontendUrl });
+      return res.json({ ...toPublicUser(user), frontendUrl });
     } catch (err) {
       return res.status(401).json({ message: "Session expired or invalid" });
     }
   });
+}
+
+function issueToken(userId: number) {
+  return jwt.sign({ id: userId }, process.env.SESSION_SECRET || "default_secret", { expiresIn: "7d" });
+}
+
+function toPublicUser(user: User) {
+  const { password: _password, ...publicUser } = user;
+  return publicUser;
+}
+
+export async function authenticateRequest(req: any, _res: any, next: any) {
+  if (req.isAuthenticated()) return next();
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return next();
+
+  try {
+    const decoded = jwt.verify(
+      authHeader.slice("Bearer ".length),
+      process.env.SESSION_SECRET || "default_secret",
+    ) as { id: number };
+    const user = await storage.getUser(decoded.id);
+    if (user) req.user = user;
+  } catch {
+    // Let the route's authorization middleware return a consistent 401 response.
+  }
+
+  return next();
 }

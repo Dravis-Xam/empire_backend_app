@@ -3,7 +3,7 @@ import { ROLES } from "@shared/schema";
 import type { Express } from "express";
 import { type Server } from "http";
 import { z } from "zod";
-import { setupAuth } from "./auth";
+import { authenticateRequest, setupAuth } from "./auth";
 import { wrapAsync } from "./error";
 import { getPaymentCallbackOrderId, getPaymentCallbackStatus, isValidKopoKopoCallback, pay, send_invoice_email } from "./pay";
 import { storage } from "./storage";
@@ -11,6 +11,7 @@ import { storage } from "./storage";
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Set up authentication (passport)
   setupAuth(app);
+  app.use("/api", authenticateRequest);
 
   // === SEED DATA ===
   await seedDatabase();
@@ -23,7 +24,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // === PROTECTED ROUTE MIDDLEWARE ===
   const requireAuth = (req: any, res: any, next: any) => {
-    if (req.isAuthenticated()) return next();
+    if (req.isAuthenticated() || req.user) return next();
     res.status(401).json({ message: "Unauthorized" });
   };
 
@@ -277,7 +278,7 @@ app.post('/api/purchase-orders', requireAuth, wrapAsync(async (req, res) => {
     // Calculate total costs for each item
     const items = input.items.map(item => ({
       productId: item.productId,
-      productName: item.productName,
+      productName: item.productName || `Product ${item.productId}`,
       quantity: item.quantity,
       unitCost: item.unitCost,
       totalCost: item.quantity * item.unitCost,
@@ -320,27 +321,16 @@ app.post('/api/purchase-orders/:id/validate', requireAuth, wrapAsync(async (req,
 
   const userId = (req.user as any).id;
   
-  // Update purchase order status
+  if (!['draft', 'sent'].includes(order.status)) {
+    return res.status(409).json({ message: `Purchase order cannot be validated from status '${order.status}'.` });
+  }
+
+  // Validation records receipt; stock is updated only once on completion.
   const validatedOrder = await storage.updatePurchaseOrder(id, {
     status: 'validated',
     validatedBy: userId,
     validatedAt: new Date(),
   });
-
-  // Update product stock levels based on purchase order items
-  const items = order.items as any[];
-  for (const item of items) {
-    const product = await storage.getProduct(item.productId);
-    if (product) {
-      // Increase stock by the purchased quantity
-      const newStock = product.stock + item.quantity;
-      await storage.updateProduct(product.id, { 
-        stock: newStock,
-        // Optionally update cost if the new purchase price is different
-        cost: item.unitCost.toString(),
-      });
-    }
-  }
 
   // Create notification
   try {
@@ -377,18 +367,8 @@ app.post('/api/purchase-orders/:id/send', requireAuth, wrapAsync(async (req, res
 
 app.post('/api/purchase-orders/:id/complete', requireAuth, wrapAsync(async (req, res) => {
   const id = parseInt(req.params.id);
-  const order = await storage.getPurchaseOrder(id);
-  
-  if (!order) {
-    return res.status(404).json({ message: 'Purchase order not found' });
-  }
-
-  const completedOrder = await storage.updatePurchaseOrder(id, {
-    status: 'completed',
-    completedAt: new Date(),
-  });
-
-  res.json(completedOrder);
+  const result = await storage.completePurchaseOrder(id);
+  res.json({ ...result.order, products: result.products });
 }));
 
   // DELIVERIES

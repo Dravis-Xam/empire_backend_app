@@ -46,6 +46,7 @@ export interface IStorage {
   getPurchaseOrder(id: number): Promise<PurchaseOrder | undefined>;
   createPurchaseOrder(order: InsertPurchaseOrder): Promise<PurchaseOrder>;
   updatePurchaseOrder(id: number, updates: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder>;
+  completePurchaseOrder(id: number): Promise<{ order: PurchaseOrder; products: Product[] }>;
 
   // Deliveries
   getDeliveries(): Promise<Delivery[]>;
@@ -151,7 +152,7 @@ export class DatabaseStorage implements IStorage {
   ) {
     const result = await db.update(users).set(data).where(eq(users.id, id)).returning();
 
-    return (result as any).rows?.[0];
+    return result[0];
   }
 
   // Products
@@ -305,6 +306,36 @@ async deleteBulkProductsById(ids: number[]): Promise<Product[]> {
       .where(eq(purchaseOrders.id, id))
       .returning();
     return order;
+  }
+
+  async completePurchaseOrder(id: number): Promise<{ order: PurchaseOrder; products: Product[] }> {
+    return db.transaction(async (tx) => {
+      const [purchaseOrder] = await tx.select().from(purchaseOrders).where(eq(purchaseOrders.id, id));
+      if (!purchaseOrder) throw Object.assign(new Error('Purchase order not found'), { status: 404 });
+      if (purchaseOrder.status === 'completed') return { order: purchaseOrder, products: [] };
+      if (purchaseOrder.status !== 'validated') {
+        throw Object.assign(new Error('Purchase order must be validated before completion'), { status: 409 });
+      }
+
+      const updatedProducts: Product[] = [];
+      for (const item of purchaseOrder.items as any[]) {
+        const [product] = await tx.select().from(products).where(eq(products.id, item.productId));
+        if (!product) throw Object.assign(new Error(`Product ${item.productId} not found`), { status: 404 });
+        const [updatedProduct] = await tx.update(products).set({
+          stock: product.stock + item.quantity,
+          cost: String(item.unitCost),
+        }).where(eq(products.id, product.id)).returning();
+        updatedProducts.push(updatedProduct);
+      }
+
+      const [completedOrder] = await tx.update(purchaseOrders).set({
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(purchaseOrders.id, id)).returning();
+
+      return { order: completedOrder, products: updatedProducts };
+    });
   }
 
 

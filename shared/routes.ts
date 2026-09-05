@@ -225,15 +225,23 @@ export const api = {
       method: 'POST' as const,
       path: '/api/purchase-orders',
       input: z.object({
-        supplierName: z.string(),
+        supplierName: z.string().trim().min(1).default('Default Supplier'),
         supplierEmail: z.string().email().optional(),
         notes: z.string().optional(),
         items: z.array(z.object({
-          productId: z.number(),
-          productName: z.string(),
-          quantity: z.number().min(1),
-          unitCost: z.number().min(0),
-        })),
+          productId: z.coerce.number().int().positive(),
+          productName: z.string().trim().optional(),
+          quantity: z.coerce.number().int().min(1),
+          unitCost: z.coerce.number().min(0).optional(),
+          cost: z.coerce.number().min(0).optional(),
+        }).refine((item) => item.unitCost !== undefined || item.cost !== undefined, {
+          message: 'unitCost or cost is required',
+        }).transform((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitCost: item.unitCost ?? item.cost!,
+        }))),
       }),
       responses: {
         201: z.custom<typeof purchaseOrders.$inferSelect>(),
